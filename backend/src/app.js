@@ -15,11 +15,26 @@ const app = express();
 
 // Security & Parsing Middleware
 app.use(helmet());
+const allowedOrigin = process.env.CLIENT_URL || "http://localhost:5173";
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL,
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin) return callback(null, true);
+
+      // In development, you might want to be more loose,
+      // but this check ensures it matches your CLIENT_URL
+      if (origin === allowedOrigin) {
+        callback(null, true);
+      } else {
+        console.error(`[CORS ERROR] Origin ${origin} not allowed by config`);
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
 app.use(express.json({ limit: "500kb" }));

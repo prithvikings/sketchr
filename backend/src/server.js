@@ -6,7 +6,7 @@ import connectDB from "./config/db.js";
 import initSockets from "./sockets/socketManager.js";
 import { startCronJobs } from "./utils/cron.util.js";
 
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 3000;
 const server = http.createServer(app);
 
 const io = initSockets(server);

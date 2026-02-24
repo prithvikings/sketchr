@@ -9,11 +9,11 @@ import { gsap } from "gsap";
 import { motion, AnimatePresence, useMotionValue } from "framer-motion";
 import { getStroke } from "perfect-freehand";
 
+import { useBoardStore } from "../../store/boardStore";
 import {
   getSvgPathFromStroke,
   getShapeAttributes,
   isIntersecting,
-  useCanvasHistory,
 } from "../../utils/uitls";
 import {
   PropertiesPanel,
@@ -62,15 +62,29 @@ const Room = () => {
   const roomRef = useRef(null);
   const innerCanvasRef = useRef(null);
 
-  // Core Tool States
+  const {
+    lines,
+    shapes,
+    stickies,
+    texts,
+    past,
+    future,
+    saveState,
+    replaceState,
+    undo,
+    redo,
+  } = useBoardStore();
+
+  const currentState = { lines, shapes, stickies, texts };
+  const canUndo = past.length > 0;
+  const canRedo = future.length > 0;
+
   const [activeTool, setActiveTool] = useState("cursor");
   const [activeColor, setActiveColor] = useState("#18181b");
   const [strokeWidth, setStrokeWidth] = useState(8);
   const [zoom, setZoom] = useState(1);
   const [selectedIds, setSelectedIds] = useState([]);
-  const [selectionBox, setSelectionBox] = useState(null);
 
-  // UI States
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isVideoCallOpen, setIsVideoCallOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
@@ -88,45 +102,29 @@ const Room = () => {
   const panX = useMotionValue(0);
   const panY = useMotionValue(0);
 
-  const {
-    currentState,
-    saveState,
-    replaceState,
-    undo,
-    redo,
-    canUndo,
-    canRedo,
-  } = useCanvasHistory({
-    stickies: [
-      {
-        id: 1,
-        text: "Group select me!",
-        color: "bg-amber-200",
-        x: 2600,
-        y: 2400,
-        width: 224,
-        height: 224,
-        rotation: -2,
-      },
-    ],
-    lines: [],
-    shapes: [
-      {
-        id: 2,
-        type: "square",
-        startX: 2300,
-        startY: 2400,
-        currentX: 2500,
-        currentY: 2600,
-        color: "#ef4444",
-        strokeWidth: 8,
-      },
-    ],
-    texts: [],
+  const currentStateRef = useRef(currentState);
+  useEffect(() => {
+    currentStateRef.current = currentState;
+  }, [currentState]);
+
+  const activeInteraction = useRef({
+    tool: null,
+    startX: 0,
+    startY: 0,
+    currentX: 0,
+    currentY: 0,
+    points: [],
+    color: "#000",
+    strokeWidth: 8,
   });
 
-  const [draftLine, setDraftLine] = useState(null);
-  const [draftShape, setDraftShape] = useState(null);
+  const draftLineRef = useRef(null);
+  const draftRectRef = useRef(null);
+  const draftEllipseRef = useRef(null);
+  const draftArrowLineRef = useRef(null);
+  const draftArrowPolyRef = useRef(null);
+  const selectionDivRef = useRef(null);
+  const draftContainerRef = useRef(null);
 
   const stickyColors = [
     "bg-amber-200",
@@ -141,7 +139,6 @@ const Room = () => {
     (idsToDelete) => {
       if (!idsToDelete.length) return;
       saveState((prev) => ({
-        ...prev,
         lines: prev.lines.filter((item) => !idsToDelete.includes(item.id)),
         shapes: prev.shapes.filter((item) => !idsToDelete.includes(item.id)),
         stickies: prev.stickies.filter(
@@ -166,9 +163,11 @@ const Room = () => {
         if (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT")
           e.target.blur();
         setSelectedIds([]);
-        setDraftLine(null);
-        setDraftShape(null);
-        setSelectionBox(null);
+        activeInteraction.current.tool = null;
+        if (draftContainerRef.current)
+          draftContainerRef.current.style.display = "none";
+        if (selectionDivRef.current)
+          selectionDivRef.current.style.display = "none";
         setActiveTool("cursor");
         return;
       }
@@ -178,11 +177,12 @@ const Room = () => {
       if (e.ctrlKey || e.metaKey) {
         if (key === "a") {
           e.preventDefault();
+          const state = currentStateRef.current;
           const allIds = [
-            ...currentState.lines,
-            ...currentState.shapes,
-            ...currentState.stickies,
-            ...currentState.texts,
+            ...state.lines,
+            ...state.shapes,
+            ...state.stickies,
+            ...state.texts,
           ].map((i) => i.id);
           setSelectedIds(allIds);
           return;
@@ -220,41 +220,23 @@ const Room = () => {
         return;
       }
 
-      switch (key) {
-        case "v":
-          setActiveTool("cursor");
-          break;
-        case "h":
-          setActiveTool("hand");
-          break;
-        case "p":
-          setActiveTool("pen");
-          break;
-        case "e":
-          setActiveTool("eraser");
-          break;
-        case "r":
-          setActiveTool("square");
-          break;
-        case "o":
-          setActiveTool("circle");
-          break;
-        case "a":
-          setActiveTool("arrow");
-          break;
-        case "t":
-          setActiveTool("text");
-          break;
-        case "s":
-          setActiveTool("sticky");
-          break;
-        default:
-          break;
-      }
+      const tools = {
+        v: "cursor",
+        h: "hand",
+        p: "pen",
+        e: "eraser",
+        r: "square",
+        o: "circle",
+        a: "arrow",
+        t: "text",
+        s: "sticky",
+      };
+      if (tools[key]) setActiveTool(tools[key]);
     };
+
     window.addEventListener("keydown", handleKeyDown, { passive: false });
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [undo, redo, deleteItems, currentState]);
+  }, [undo, redo, deleteItems]);
 
   useEffect(() => {
     const container = roomWrapperRef.current;
@@ -282,11 +264,13 @@ const Room = () => {
     }
     if (activeTool === "cursor") {
       e.stopPropagation();
-      if (e.shiftKey)
+      if (e.shiftKey) {
         setSelectedIds((prev) =>
           prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
         );
-      else if (!selectedIds.includes(id)) setSelectedIds([id]);
+      } else if (!selectedIds.includes(id)) {
+        setSelectedIds([id]);
+      }
     }
   };
 
@@ -297,12 +281,18 @@ const Room = () => {
 
     if (activeTool === "cursor" && e.target === innerCanvasRef.current) {
       if (!e.shiftKey) setSelectedIds([]);
-      setSelectionBox({
+      activeInteraction.current = {
+        tool: "selection",
         startX: clickX,
         startY: clickY,
         currentX: clickX,
         currentY: clickY,
-      });
+      };
+      selectionDivRef.current.style.display = "block";
+      selectionDivRef.current.style.left = `${clickX}px`;
+      selectionDivRef.current.style.top = `${clickY}px`;
+      selectionDivRef.current.style.width = `0px`;
+      selectionDivRef.current.style.height = `0px`;
       return;
     }
 
@@ -317,10 +307,10 @@ const Room = () => {
         height: 224,
         rotation: Math.floor(Math.random() * 8) - 4,
       };
-      saveState({
-        ...currentState,
-        stickies: [...currentState.stickies, newSticky],
-      });
+      saveState((prev) => ({
+        ...prev,
+        stickies: [...prev.stickies, newSticky],
+      }));
       setActiveTool("cursor");
       setSelectedIds([newSticky.id]);
     } else if (activeTool === "text") {
@@ -331,49 +321,93 @@ const Room = () => {
         size: getFontSize(strokeWidth),
         x: clickX,
         y: clickY - getFontSize(strokeWidth) / 2,
-        width: 200,
+        width: 300,
         height: getFontSize(strokeWidth) * 1.5,
       };
-      saveState({ ...currentState, texts: [...currentState.texts, newText] });
+      saveState((prev) => ({ ...prev, texts: [...prev.texts, newText] }));
       setActiveTool("cursor");
       setSelectedIds([newText.id]);
-    } else if (activeTool === "pen") {
-      setDraftLine({
-        id: Date.now(),
-        color: activeColor,
-        size: strokeWidth,
-        points: [[clickX, clickY, 0.5]],
-      });
-      setSelectedIds([]);
-    } else if (["square", "circle", "arrow"].includes(activeTool)) {
-      setDraftShape({
-        id: Date.now(),
-        type: activeTool,
+    } else if (["pen", "square", "circle", "arrow"].includes(activeTool)) {
+      activeInteraction.current = {
+        tool: activeTool,
         startX: clickX,
         startY: clickY,
         currentX: clickX,
         currentY: clickY,
+        points: [[clickX, clickY, 0.5]],
         color: activeColor,
         strokeWidth,
-      });
+      };
       setSelectedIds([]);
+      draftContainerRef.current.style.display = "block";
+
+      draftLineRef.current.style.display = "none";
+      draftRectRef.current.style.display = "none";
+      draftEllipseRef.current.style.display = "none";
+      draftArrowLineRef.current.style.display = "none";
+      draftArrowPolyRef.current.style.display = "none";
+
+      if (activeTool === "pen") {
+        draftLineRef.current.style.display = "block";
+        draftLineRef.current.setAttribute("fill", activeColor);
+        draftLineRef.current.setAttribute("d", "");
+      } else if (activeTool === "square") {
+        draftRectRef.current.style.display = "block";
+        draftRectRef.current.setAttribute("stroke", activeColor);
+        draftRectRef.current.setAttribute("stroke-width", strokeWidth);
+        draftRectRef.current.setAttribute("x", clickX);
+        draftRectRef.current.setAttribute("y", clickY);
+        draftRectRef.current.setAttribute("width", 0);
+        draftRectRef.current.setAttribute("height", 0);
+      } else if (activeTool === "circle") {
+        draftEllipseRef.current.style.display = "block";
+        draftEllipseRef.current.setAttribute("stroke", activeColor);
+        draftEllipseRef.current.setAttribute("stroke-width", strokeWidth);
+        draftEllipseRef.current.setAttribute("cx", clickX);
+        draftEllipseRef.current.setAttribute("cy", clickY);
+        draftEllipseRef.current.setAttribute("rx", 0);
+        draftEllipseRef.current.setAttribute("ry", 0);
+      } else if (activeTool === "arrow") {
+        draftArrowLineRef.current.style.display = "block";
+        draftArrowPolyRef.current.style.display = "block";
+        draftArrowLineRef.current.setAttribute("stroke", activeColor);
+        draftArrowLineRef.current.setAttribute("stroke-width", strokeWidth);
+        draftArrowPolyRef.current.setAttribute("stroke", activeColor);
+        draftArrowPolyRef.current.setAttribute("stroke-width", strokeWidth);
+        draftArrowLineRef.current.setAttribute("x1", clickX);
+        draftArrowLineRef.current.setAttribute("y1", clickY);
+        draftArrowLineRef.current.setAttribute("x2", clickX);
+        draftArrowLineRef.current.setAttribute("y2", clickY);
+        draftArrowPolyRef.current.setAttribute("points", "");
+      }
     }
   };
 
   const handlePointerMove = (e) => {
+    const data = activeInteraction.current;
+    if (!data.tool) return;
+
     const canvasBounds = innerCanvasRef.current.getBoundingClientRect();
     const currentX = (e.clientX - canvasBounds.left) / zoom;
     const currentY = (e.clientY - canvasBounds.top) / zoom;
+    data.currentX = currentX;
+    data.currentY = currentY;
 
-    if (activeTool === "cursor" && selectionBox) {
-      setSelectionBox((prev) => ({ ...prev, currentX, currentY }));
-      const box = {
-        x: Math.min(selectionBox.startX, currentX),
-        y: Math.min(selectionBox.startY, currentY),
-        width: Math.abs(currentX - selectionBox.startX),
-        height: Math.abs(currentY - selectionBox.startY),
-      };
+    if (data.tool === "selection") {
+      const x = Math.min(data.startX, currentX);
+      const y = Math.min(data.startY, currentY);
+      const w = Math.abs(currentX - data.startX);
+      const h = Math.abs(currentY - data.startY);
+
+      selectionDivRef.current.style.left = `${x}px`;
+      selectionDivRef.current.style.top = `${y}px`;
+      selectionDivRef.current.style.width = `${w}px`;
+      selectionDivRef.current.style.height = `${h}px`;
+
+      const box = { x, y, width: w, height: h };
       const newlySelected = [];
+      const state = currentStateRef.current;
+
       const checkIntersect = (items) => {
         items.forEach((item) => {
           const itemBox =
@@ -383,58 +417,115 @@ const Room = () => {
           if (isIntersecting(box, itemBox)) newlySelected.push(item.id);
         });
       };
-      checkIntersect(currentState.lines);
-      checkIntersect(currentState.shapes);
-      checkIntersect(currentState.stickies);
-      checkIntersect(currentState.texts);
+      checkIntersect(state.lines);
+      checkIntersect(state.shapes);
+      checkIntersect(state.stickies);
+      checkIntersect(state.texts);
       setSelectedIds(newlySelected);
-    } else if (activeTool === "pen" && draftLine) {
+    } else if (data.tool === "pen") {
       const pressure = e.pressure !== 0 ? e.pressure : 0.5;
-      setDraftLine((prev) => ({
-        ...prev,
-        points: [...prev.points, [currentX, currentY, pressure]],
-      }));
-    } else if (
-      ["square", "circle", "arrow"].includes(activeTool) &&
-      draftShape
-    ) {
-      setDraftShape((prev) => ({ ...prev, currentX, currentY }));
+      data.points.push([currentX, currentY, pressure]);
+      const d = getSvgPathFromStroke(
+        getStroke(data.points, {
+          size: data.strokeWidth,
+          thinning: 0.6,
+          smoothing: 0.5,
+          streamline: 0.5,
+        }),
+      );
+      draftLineRef.current.setAttribute("d", d);
+    } else if (data.tool === "square") {
+      const x = Math.min(data.startX, currentX);
+      const y = Math.min(data.startY, currentY);
+      const w = Math.max(10, Math.abs(currentX - data.startX));
+      const h = Math.max(10, Math.abs(currentY - data.startY));
+      draftRectRef.current.setAttribute("x", x);
+      draftRectRef.current.setAttribute("y", y);
+      draftRectRef.current.setAttribute("width", w);
+      draftRectRef.current.setAttribute("height", h);
+    } else if (data.tool === "circle") {
+      const x = Math.min(data.startX, currentX);
+      const y = Math.min(data.startY, currentY);
+      const w = Math.max(10, Math.abs(currentX - data.startX));
+      const h = Math.max(10, Math.abs(currentY - data.startY));
+      draftEllipseRef.current.setAttribute("cx", x + w / 2);
+      draftEllipseRef.current.setAttribute("cy", y + h / 2);
+      draftEllipseRef.current.setAttribute("rx", w / 2);
+      draftEllipseRef.current.setAttribute("ry", h / 2);
+    } else if (data.tool === "arrow") {
+      const angle = Math.atan2(currentY - data.startY, currentX - data.startX);
+      const headLen = data.strokeWidth * 3;
+      const p1x = currentX - headLen * Math.cos(angle - Math.PI / 6);
+      const p1y = currentY - headLen * Math.sin(angle - Math.PI / 6);
+      const p2x = currentX - headLen * Math.cos(angle + Math.PI / 6);
+      const p2y = currentY - headLen * Math.sin(angle + Math.PI / 6);
+
+      draftArrowLineRef.current.setAttribute("x1", data.startX);
+      draftArrowLineRef.current.setAttribute("y1", data.startY);
+      draftArrowLineRef.current.setAttribute("x2", currentX);
+      draftArrowLineRef.current.setAttribute("y2", currentY);
+      draftArrowPolyRef.current.setAttribute(
+        "points",
+        `${p1x},${p1y} ${currentX},${currentY} ${p2x},${p2y}`,
+      );
     }
   };
 
   const handlePointerUp = () => {
-    if (selectionBox) setSelectionBox(null);
-    if (draftLine) {
-      const xs = draftLine.points.map((p) => p[0]);
-      const ys = draftLine.points.map((p) => p[1]);
-      const pad = draftLine.size * 2;
+    const data = activeInteraction.current;
+    if (!data.tool) return;
+
+    if (data.tool === "selection") {
+      selectionDivRef.current.style.display = "none";
+    } else if (data.tool === "pen") {
+      const xs = data.points.map((p) => p[0]);
+      const ys = data.points.map((p) => p[1]);
+      const pad = data.strokeWidth * 2;
       const minX = Math.min(...xs) - pad;
       const minY = Math.min(...ys) - pad;
       const width = Math.max(...xs) - minX + pad;
       const height = Math.max(...ys) - minY + pad;
-      const normPoints = draftLine.points.map((p) => [
+      const normPoints = data.points.map((p) => [
         p[0] - minX,
         p[1] - minY,
         p[2],
       ]);
+
       saveState((prev) => ({
         ...prev,
         lines: [
           ...prev.lines,
-          { ...draftLine, x: minX, y: minY, width, height, points: normPoints },
+          {
+            id: Date.now(),
+            color: data.color,
+            size: data.strokeWidth,
+            x: minX,
+            y: minY,
+            width,
+            height,
+            points: normPoints,
+          },
         ],
       }));
-      setDraftLine(null);
+    } else if (["square", "circle", "arrow"].includes(data.tool)) {
+      const attrs = getShapeAttributes(data);
+      const newShape = {
+        id: Date.now(),
+        type: data.tool,
+        startX: data.startX,
+        startY: data.startY,
+        currentX: data.currentX,
+        currentY: data.currentY,
+        color: data.color,
+        strokeWidth: data.strokeWidth,
+        ...attrs,
+      };
+      saveState((prev) => ({ ...prev, shapes: [...prev.shapes, newShape] }));
+      setSelectedIds([newShape.id]);
     }
-    if (draftShape) {
-      const attrs = getShapeAttributes(draftShape);
-      saveState((prev) => ({
-        ...prev,
-        shapes: [...prev.shapes, { ...draftShape, ...attrs }],
-      }));
-      setSelectedIds([draftShape.id]);
-      setDraftShape(null);
-    }
+
+    data.tool = null;
+    draftContainerRef.current.style.display = "none";
   };
 
   useLayoutEffect(() => {
@@ -472,27 +563,9 @@ const Room = () => {
     if (["pen", "square", "circle", "arrow"].includes(activeTool))
       return "cursor-crosshair";
     if (activeTool === "eraser") return "cursor-cell";
-    return selectionBox ? "cursor-crosshair" : "cursor-default";
-  };
-
-  const handleGroupDragMove = (e, info) => {
-    const dx = info.delta.x / zoom;
-    const dy = info.delta.y / zoom;
-    replaceState((state) => {
-      const applyDelta = (items) =>
-        items.map((item) =>
-          selectedIds.includes(item.id)
-            ? { ...item, x: item.x + dx, y: item.y + dy }
-            : item,
-        );
-      return {
-        ...state,
-        lines: applyDelta(state.lines),
-        shapes: applyDelta(state.shapes),
-        stickies: applyDelta(state.stickies),
-        texts: applyDelta(state.texts),
-      };
-    });
+    return activeInteraction.current.tool === "selection"
+      ? "cursor-crosshair"
+      : "cursor-default";
   };
 
   const getGroupBounds = () => {
@@ -509,15 +582,15 @@ const Room = () => {
         maxY = Math.max(maxY, item.y + item.height);
       }
     };
-    currentState.lines.forEach(checkItem);
-    currentState.shapes.forEach(checkItem);
-    currentState.stickies.forEach(checkItem);
-    currentState.texts.forEach(checkItem);
+    currentStateRef.current.lines.forEach(checkItem);
+    currentStateRef.current.shapes.forEach(checkItem);
+    currentStateRef.current.stickies.forEach(checkItem);
+    currentStateRef.current.texts.forEach(checkItem);
     return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
   };
 
   const handleGroupResizeStart = () => {
-    initialGroupStateRef.current = currentState;
+    initialGroupStateRef.current = currentStateRef.current;
   };
 
   const handleGroupResizeDrag = (e, info, bounds, axis = "xy") => {
@@ -591,12 +664,12 @@ const Room = () => {
   };
 
   const handleGroupResizeEnd = () => {
-    saveState(currentState);
+    saveState(currentStateRef.current);
     initialGroupStateRef.current = null;
   };
 
   const handleExportJSON = () => {
-    const dataStr = JSON.stringify(currentState, null, 2);
+    const dataStr = JSON.stringify(currentStateRef.current, null, 2);
     const blob = new Blob([dataStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -661,7 +734,6 @@ const Room = () => {
           setIsShareOpen={setIsShareOpen}
           setIsSettingsOpen={setIsSettingsOpen}
         />
-
         <ChatPanel
           isOpen={isChatOpen}
           onClose={() => setIsChatOpen(false)}
@@ -726,20 +798,62 @@ const Room = () => {
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
           className="canvas-bg absolute w-[5000px] h-[5000px] top-1/2 left-1/2 -mt-[2500px] -ml-[2500px] bg-[radial-gradient(#a1a1aa_2px,transparent_2px)] [background-size:24px_24px] touch-none"
         >
-          {selectionBox && (
-            <div
-              className="absolute border border-blue-500 bg-blue-500/10 z-50 pointer-events-none"
-              style={{
-                left: Math.min(selectionBox.startX, selectionBox.currentX),
-                top: Math.min(selectionBox.startY, selectionBox.currentY),
-                width: Math.abs(selectionBox.currentX - selectionBox.startX),
-                height: Math.abs(selectionBox.currentY - selectionBox.startY),
-              }}
+          <div
+            ref={selectionDivRef}
+            className="absolute border border-blue-500 bg-blue-500/10 z-50 pointer-events-none hidden"
+          />
+
+          <svg
+            ref={draftContainerRef}
+            className="absolute inset-0 w-full h-full pointer-events-none z-0 overflow-visible hidden"
+          >
+            <path
+              ref={draftLineRef}
+              d=""
+              fill="transparent"
+              className="hidden"
             />
-          )}
+            <rect
+              ref={draftRectRef}
+              x="0"
+              y="0"
+              width="0"
+              height="0"
+              fill="transparent"
+              rx="8"
+              className="hidden"
+            />
+            <ellipse
+              ref={draftEllipseRef}
+              cx="0"
+              cy="0"
+              rx="0"
+              ry="0"
+              fill="transparent"
+              className="hidden"
+            />
+            <line
+              ref={draftArrowLineRef}
+              x1="0"
+              y1="0"
+              x2="0"
+              y2="0"
+              strokeLinecap="round"
+              className="hidden"
+            />
+            <polyline
+              ref={draftArrowPolyRef}
+              points=""
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="hidden"
+            />
+          </svg>
 
           {showGroupHandles && (
             <div
+              id="group-box"
               className="absolute border-2 border-dashed border-blue-500 z-50 pointer-events-none"
               style={{
                 left: groupBounds.x,
@@ -749,9 +863,9 @@ const Room = () => {
               }}
             >
               <button
-                onClick={(e) => {
+                onPointerDownCapture={(e) => {
                   e.stopPropagation();
-                  deleteItems(selectedIds);
+                  deleteItems(selectedIdsRef.current);
                 }}
                 className="absolute -top-4 -right-4 w-8 h-8 bg-red-500 text-white border-2 border-zinc-900 rounded-full flex items-center justify-center hover:scale-110 shadow-[2px_2px_0px_#27272a] pointer-events-auto transition-transform"
               >
@@ -759,22 +873,6 @@ const Room = () => {
               </button>
               <ResizeHandles bounds={groupBounds} />
             </div>
-          )}
-
-          {draftLine && (
-            <svg className="absolute inset-0 w-full h-full pointer-events-none z-0 overflow-visible">
-              <path
-                d={getSvgPathFromStroke(
-                  getStroke(draftLine.points, {
-                    size: draftLine.size,
-                    thinning: 0.6,
-                    smoothing: 0.5,
-                    streamline: 0.5,
-                  }),
-                )}
-                fill={draftLine.color}
-              />
-            </svg>
           )}
 
           <AnimatePresence>
@@ -795,13 +893,16 @@ const Room = () => {
               return (
                 <motion.div
                   key={item.id}
+                  data-id={item.id}
                   style={{
                     position: "absolute",
                     left: item.x,
                     top: item.y,
                     width: item.width,
-                    height: item.height,
+                    height: isText ? "auto" : item.height,
                     color: item.color,
+                    x: 0,
+                    y: 0,
                   }}
                   className={`z-10 ${activeTool === "cursor" || activeTool === "eraser" ? "pointer-events-auto" : "pointer-events-none"} ${activeTool === "eraser" ? "hover:opacity-30 transition-opacity" : ""}`}
                   drag={activeTool === "cursor"}
@@ -812,9 +913,50 @@ const Room = () => {
                       deleteItems([item.id]);
                   }}
                   onDrag={(e, info) => {
-                    if (isSelected) handleGroupDragMove(e, info);
+                    const targetIds = selectedIdsRef.current.includes(item.id)
+                      ? selectedIdsRef.current
+                      : [item.id];
+                    targetIds.forEach((id) => {
+                      if (id === item.id) return;
+                      const el = document.querySelector(`[data-id='${id}']`);
+                      if (el)
+                        el.style.transform = `translate(${info.offset.x}px, ${info.offset.y}px)`;
+                    });
+                    const boxEl = document.getElementById("group-box");
+                    if (boxEl)
+                      boxEl.style.transform = `translate(${info.offset.x}px, ${info.offset.y}px)`;
                   }}
-                  onDragEnd={() => saveState(currentState)}
+                  onDragEnd={(e, info) => {
+                    const dx = info.offset.x / zoom;
+                    const dy = info.offset.y / zoom;
+                    const targetIds = selectedIdsRef.current.includes(item.id)
+                      ? selectedIdsRef.current
+                      : [item.id];
+
+                    saveState((state) => {
+                      const applyOffset = (items) =>
+                        items.map((i) =>
+                          targetIds.includes(i.id)
+                            ? { ...i, x: i.x + dx, y: i.y + dy }
+                            : i,
+                        );
+                      return {
+                        ...state,
+                        lines: applyOffset(state.lines),
+                        shapes: applyOffset(state.shapes),
+                        stickies: applyOffset(state.stickies),
+                        texts: applyOffset(state.texts),
+                      };
+                    });
+
+                    targetIds.forEach((id) => {
+                      if (id === item.id) return;
+                      const el = document.querySelector(`[data-id='${id}']`);
+                      if (el) el.style.transform = "none";
+                    });
+                    const boxEl = document.getElementById("group-box");
+                    if (boxEl) boxEl.style.transform = "none";
+                  }}
                 >
                   {showIndividualHandles && (
                     <div className="absolute inset-0 border-2 border-dashed border-blue-500 pointer-events-none z-50" />
@@ -893,7 +1035,7 @@ const Room = () => {
                                 : st,
                             ),
                           }));
-                          saveState(currentState);
+                          saveState(currentStateRef.current);
                         }}
                         className={`w-full h-full bg-transparent border-none resize-none outline-none font-handwriting text-2xl text-zinc-900 leading-tight placeholder:text-zinc-800/50 ${activeTool === "eraser" ? "pointer-events-none" : "cursor-text"}`}
                         placeholder="Type something..."
@@ -910,6 +1052,10 @@ const Room = () => {
                           ? e.preventDefault()
                           : e.stopPropagation()
                       }
+                      onInput={(e) => {
+                        e.target.style.height = "auto";
+                        e.target.style.height = e.target.scrollHeight + "px";
+                      }}
                       onBlur={(e) => {
                         replaceState((s) => ({
                           ...s,
@@ -919,9 +1065,9 @@ const Room = () => {
                               : t,
                           ),
                         }));
-                        saveState(currentState);
+                        saveState(currentStateRef.current);
                       }}
-                      className={`w-full h-full bg-transparent border-none outline-none resize-none overflow-hidden whitespace-pre font-poppins font-bold leading-tight placeholder:text-zinc-300 pointer-events-auto ${activeTool === "eraser" ? "pointer-events-none" : ""}`}
+                      className={`w-full h-full bg-transparent border-none outline-none resize-none overflow-hidden whitespace-pre-wrap font-poppins font-bold leading-tight placeholder:text-zinc-300 pointer-events-auto ${activeTool === "eraser" ? "pointer-events-none" : ""}`}
                       placeholder="Type..."
                       style={{ fontSize: `${item.size}px` }}
                     />
@@ -930,7 +1076,7 @@ const Room = () => {
                   {showIndividualHandles && (
                     <>
                       <button
-                        onClick={(e) => {
+                        onPointerDownCapture={(e) => {
                           e.stopPropagation();
                           deleteItems([item.id]);
                         }}
@@ -945,56 +1091,6 @@ const Room = () => {
               );
             })}
           </AnimatePresence>
-
-          {draftShape && (
-            <div
-              style={{
-                position: "absolute",
-                left: Math.min(draftShape.startX, draftShape.currentX),
-                top: Math.min(draftShape.startY, draftShape.currentY),
-                width: Math.max(
-                  10,
-                  Math.abs(draftShape.currentX - draftShape.startX),
-                ),
-                height: Math.max(
-                  10,
-                  Math.abs(draftShape.currentY - draftShape.startY),
-                ),
-              }}
-              className="z-10 pointer-events-none"
-            >
-              <svg className="w-full h-full overflow-visible">
-                {draftShape.type === "square" ? (
-                  <rect
-                    x="0"
-                    y="0"
-                    width="100%"
-                    height="100%"
-                    fill="transparent"
-                    stroke={draftShape.color}
-                    strokeWidth={draftShape.strokeWidth}
-                    rx="8"
-                  />
-                ) : draftShape.type === "circle" ? (
-                  <ellipse
-                    cx="50%"
-                    cy="50%"
-                    rx="50%"
-                    ry="50%"
-                    fill="transparent"
-                    stroke={draftShape.color}
-                    strokeWidth={draftShape.strokeWidth}
-                  />
-                ) : (
-                  <ArrowSVG
-                    shape={draftShape}
-                    width={Math.abs(draftShape.currentX - draftShape.startX)}
-                    height={Math.abs(draftShape.currentY - draftShape.startY)}
-                  />
-                )}
-              </svg>
-            </div>
-          )}
         </motion.div>
       </main>
     </div>
