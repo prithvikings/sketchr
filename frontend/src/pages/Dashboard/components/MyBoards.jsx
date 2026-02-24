@@ -1,48 +1,35 @@
-import React, { useLayoutEffect, useRef } from "react";
+import React, { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { gsap } from "gsap";
+import { useNavigate } from "react-router-dom";
+import api from "../../../services/api";
+import { useAuthStore } from "../../../store/authStore";
 
 const MyBoards = () => {
   const containerRef = useRef(null);
+  const navigate = useNavigate();
+  const { user } = useAuthStore();
 
-  const boards = [
-    {
-      id: 1,
-      title: "Q3 Marketing Site",
-      updated: "2h ago",
-      role: "Owner",
-      color: "bg-amber-100",
-    },
-    {
-      id: 2,
-      title: "App Architecture",
-      updated: "5h ago",
-      role: "Editor",
-      color: "bg-blue-100",
-    },
-    {
-      id: 3,
-      title: "User Flow Brainstorm",
-      updated: "1d ago",
-      role: "Owner",
-      color: "bg-pink-100",
-    },
-    {
-      id: 4,
-      title: "Design System V2",
-      updated: "2d ago",
-      role: "Viewer",
-      color: "bg-green-100",
-    },
-    {
-      id: 5,
-      title: "Client Pitch Deck",
-      updated: "3d ago",
-      role: "Owner",
-      color: "bg-purple-100",
-    },
-  ];
+  const [boards, setBoards] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch real data
+  useEffect(() => {
+    const fetchBoards = async () => {
+      try {
+        const response = await api.get("/rooms");
+        setBoards(response.data);
+      } catch (error) {
+        console.error("Failed to fetch boards:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchBoards();
+  }, []);
 
   useLayoutEffect(() => {
+    if (isLoading) return; // Wait for data to load before animating
+
     let ctx = gsap.context(() => {
       gsap.fromTo(
         ".board-item",
@@ -64,7 +51,32 @@ const MyBoards = () => {
     }, containerRef);
 
     return () => ctx.revert();
-  }, []);
+  }, [isLoading, boards.length]);
+
+  const handleCreateNew = async () => {
+    try {
+      const response = await api.post("/rooms", {
+        name: "New Canvas",
+        maxParticipants: 10,
+      });
+      navigate(`/room/${response.data._id}`);
+    } catch (error) {
+      alert("Failed to create board");
+    }
+  };
+
+  // Helper to assign random brutalist colors to boards based on ID
+  const getBoardColor = (id) => {
+    const colors = [
+      "bg-amber-100",
+      "bg-blue-100",
+      "bg-pink-100",
+      "bg-green-100",
+      "bg-purple-100",
+    ];
+    const charCode = id.charCodeAt(id.length - 1);
+    return colors[charCode % colors.length];
+  };
 
   return (
     <main
@@ -87,61 +99,67 @@ const MyBoards = () => {
             All Boards
           </button>
           <button className="px-5 py-2 bg-transparent border-2 border-dashed border-zinc-400 rounded-[24px] font-bold text-zinc-600 hover:border-zinc-800 hover:text-zinc-900 transition-all">
-            Starred
-          </button>
-          <button className="px-5 py-2 bg-transparent border-2 border-dashed border-zinc-400 rounded-[24px] font-bold text-zinc-600 hover:border-zinc-800 hover:text-zinc-900 transition-all">
             Shared with me
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 pb-12">
-        {/* Create New Board Card */}
-        <div className="board-item cursor-pointer bg-zinc-50 border-2 border-dashed border-zinc-400 rounded-[32px] p-6 h-64 flex flex-col items-center justify-center hover:bg-zinc-100 hover:border-zinc-800 hover:border-solid hover:shadow-[8px_8px_0px_#27272a] hover:-translate-y-2 transition-all duration-200 group">
-          <div className="h-16 w-16 bg-blue-100 border-2 border-zinc-800 rounded-full flex items-center justify-center mb-4 group-hover:bg-amber-200 shadow-[4px_4px_0px_#27272a] transition-colors">
-            <span className="text-3xl font-bold text-zinc-900">+</span>
-          </div>
-          <h3 className="font-instrument text-xl font-bold text-zinc-900">
-            New Board
-          </h3>
-          <p className="text-sm font-poppins text-zinc-500 mt-2">
-            Start from scratch
-          </p>
+      {isLoading ? (
+        <div className="w-full flex justify-center py-20">
+          <span className="font-instrument text-2xl font-bold animate-pulse text-zinc-500">
+            Loading boards...
+          </span>
         </div>
-
-        {/* Existing Boards */}
-        {boards.map((board) => (
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 pb-12">
+          {/* Create New Board Card */}
           <div
-            key={board.id}
-            className={`board-item cursor-pointer ${board.color} border-2 border-zinc-800 rounded-[32px] p-6 h-64 flex flex-col justify-between shadow-[8px_8px_0px_#27272a] hover:shadow-[12px_12px_0px_#27272a] hover:-translate-y-2 transition-all duration-200`}
+            onClick={handleCreateNew}
+            className="board-item cursor-pointer bg-zinc-50 border-2 border-dashed border-zinc-400 rounded-[32px] p-6 h-64 flex flex-col items-center justify-center hover:bg-zinc-100 hover:border-zinc-800 hover:border-solid hover:shadow-[8px_8px_0px_#27272a] hover:-translate-y-2 transition-all duration-200 group"
           >
-            {/* Abstract Thumbnail */}
-            <div className="w-full h-1/2 bg-white/50 border-2 border-zinc-800/20 rounded-[16px] mb-4 relative overflow-hidden group-hover:border-zinc-800/50 transition-colors">
-              <div className="absolute top-3 left-3 w-10 h-10 bg-white border-2 border-zinc-800 rounded-[8px] shadow-[2px_2px_0px_rgba(39,39,42,0.3)]"></div>
-              <div className="absolute top-8 left-16 w-16 h-6 bg-amber-200 border-2 border-zinc-800 rounded-[4px] shadow-[2px_2px_0px_rgba(39,39,42,0.3)]"></div>
+            <div className="h-16 w-16 bg-blue-100 border-2 border-zinc-800 rounded-full flex items-center justify-center mb-4 group-hover:bg-amber-200 shadow-[4px_4px_0px_#27272a] transition-colors">
+              <span className="text-3xl font-bold text-zinc-900">+</span>
             </div>
-
-            <div>
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="font-instrument text-2xl font-bold text-zinc-900 leading-tight truncate pr-2">
-                  {board.title}
-                </h3>
-                <button className="text-zinc-900 hover:text-white hover:bg-zinc-900 border-2 border-transparent hover:border-zinc-900 rounded-full w-8 h-8 flex items-center justify-center transition-colors shrink-0">
-                  ⋮
-                </button>
-              </div>
-              <div className="flex justify-between items-center mt-auto">
-                <p className="text-sm font-poppins text-zinc-600">
-                  Updated {board.updated}
-                </p>
-                <span className="text-xs font-bold font-poppins bg-white border-2 border-zinc-800 px-3 py-1 rounded-[16px] shadow-[2px_2px_0px_#27272a]">
-                  {board.role}
-                </span>
-              </div>
-            </div>
+            <h3 className="font-instrument text-xl font-bold text-zinc-900">
+              New Board
+            </h3>
+            <p className="text-sm font-poppins text-zinc-500 mt-2">
+              Start from scratch
+            </p>
           </div>
-        ))}
-      </div>
+
+          {/* Existing Boards */}
+          {boards.map((board) => (
+            <div
+              key={board._id}
+              onClick={() => navigate(`/room/${board._id}`)}
+              className={`board-item cursor-pointer ${getBoardColor(board._id)} border-2 border-zinc-800 rounded-[32px] p-6 h-64 flex flex-col justify-between shadow-[8px_8px_0px_#27272a] hover:shadow-[12px_12px_0px_#27272a] hover:-translate-y-2 transition-all duration-200`}
+            >
+              {/* Abstract Thumbnail */}
+              <div className="w-full h-1/2 bg-white/50 border-2 border-zinc-800/20 rounded-[16px] mb-4 relative overflow-hidden group-hover:border-zinc-800/50 transition-colors">
+                <div className="absolute top-3 left-3 w-10 h-10 bg-white border-2 border-zinc-800 rounded-[8px] shadow-[2px_2px_0px_rgba(39,39,42,0.3)]"></div>
+                <div className="absolute top-8 left-16 w-16 h-6 bg-zinc-800 border-2 border-zinc-800 rounded-[4px] shadow-[2px_2px_0px_rgba(39,39,42,0.3)]"></div>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="font-instrument text-2xl font-bold text-zinc-900 leading-tight truncate pr-2">
+                    {board.name}
+                  </h3>
+                </div>
+                <div className="flex justify-between items-center mt-auto">
+                  <p className="text-xs font-poppins text-zinc-600 font-bold">
+                    {new Date(board.createdAt).toLocaleDateString()}
+                  </p>
+                  <span className="text-[10px] font-bold font-poppins bg-white border-2 border-zinc-800 px-2 py-1 rounded-[12px] shadow-[2px_2px_0px_#27272a] uppercase">
+                    {board.hostId === user?.id ? "Owner" : "Guest"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </main>
   );
 };

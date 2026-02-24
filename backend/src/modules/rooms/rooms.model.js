@@ -1,7 +1,7 @@
-// src/modules/rooms/rooms.model.js
 import mongoose from "mongoose";
 
 const roomSchema = new mongoose.Schema({
+  name: { type: String, default: "Untitled Board" }, // <-- ADDED THIS
   hostId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   participants: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
   maxParticipants: { type: Number, default: 10 },

@@ -29,14 +29,35 @@ const initSockets = (httpServer) => {
   });
 
   io.on("connection", (socket) => {
-    socket.on("join_room", ({ roomId }) => {
+    socket.on("join_room", async ({ roomId }) => {
       if (!roomId) return;
       socket.join(roomId);
       socket.roomId = roomId;
-      if (!roomStateCache.has(roomId)) roomStateCache.set(roomId, new Map());
+
+      // 1. If room isn't in cache, try to load it from MongoDB
+      if (!roomStateCache.has(roomId)) {
+        const savedBoard = await Whiteboard.findOne({ roomId });
+        const elementMap = new Map();
+
+        if (savedBoard && savedBoard.elements) {
+          savedBoard.elements.forEach((el) => elementMap.set(el.id, el));
+        }
+        roomStateCache.set(roomId, elementMap);
+      }
+
+      // 2. Send the current state to the user who just joined
+      const currentElements = Array.from(roomStateCache.get(roomId).values());
+      socket.emit("initial_state", currentElements);
+
+      // 3. Notify others
       socket
         .to(roomId)
         .emit("user_joined", { socketId: socket.id, userId: socket.user.id });
+    });
+
+    socket.on("cursor_move", ({ roomId, cursor }) => {
+      // Broadcast cursor position to everyone EXCEPT the sender
+      socket.to(roomId).emit("cursor_move", { socketId: socket.id, cursor });
     });
 
     socket.on("leave_room", ({ roomId }) => {
@@ -56,6 +77,11 @@ const initSockets = (httpServer) => {
       if (roomStateCache.has(roomId))
         roomStateCache.get(roomId).set(element.id, element);
       socket.to(roomId).emit("add_element", element);
+    });
+
+    socket.on("video_ready", ({ roomId, peerId }) => {
+      // Tell everyone else this specific unique peer is ready
+      socket.to(roomId).emit("user_video_ready", { peerId });
     });
 
     socket.on("update_element", ({ roomId, elementId, updates }) => {
@@ -88,10 +114,19 @@ const initSockets = (httpServer) => {
         .to(targetId)
         .emit("receive_ice", { senderId: socket.id, candidate });
     });
+    socket.on("send_message", ({ roomId, message }) => {
+      // Broadcast the message to everyone in the room EXCEPT the sender
+      socket.to(roomId).emit("receive_message", message);
+    });
 
     socket.on("disconnect", async () => {
       const roomId = socket.roomId;
       if (!roomId) return;
+
+      // Tell everyone this user left so their cursor gets deleted
+      socket
+        .to(roomId)
+        .emit("user_left", { socketId: socket.id, userId: socket.user.id });
 
       const room = io.sockets.adapter.rooms.get(roomId);
       if (!room || room.size === 0) {

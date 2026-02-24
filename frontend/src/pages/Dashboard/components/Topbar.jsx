@@ -7,9 +7,37 @@ const Topbar = () => {
   const [isJoinOpen, setIsJoinOpen] = useState(false);
   const [isNewBoardOpen, setIsNewBoardOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
+
+  const handleCreateRoom = async () => {
+    setIsCreating(true);
+    try {
+      const name = document.getElementById("boardNameInput").value.trim();
+      const response = await api.post("/rooms", { name, maxParticipants: 10 });
+      const roomId = response.data._id;
+
+      setIsNewBoardOpen(false);
+      navigate(`/room/${roomId}`);
+    } catch (error) {
+      console.error("Failed to create room:", error);
+      alert(error.response?.data?.error || "Failed to create board");
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleJoinRoom = (e) => {
+    // Prevent page reload on form submit
+    e.preventDefault();
+    const roomId = e.target.roomCode.value.trim();
+    if (roomId) {
+      setIsJoinOpen(false);
+      navigate(`/room/${roomId}`);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -101,8 +129,13 @@ const Topbar = () => {
       {/* Join via Code Modal */}
       {isJoinOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/40 backdrop-blur-sm">
-          <div className="bg-amber-100 border-2 border-zinc-800 rounded-[32px] p-8 w-full max-w-sm shadow-[12px_12px_0px_#27272a] relative">
+          {/* Changed to form to handle the Enter key submission */}
+          <form
+            onSubmit={handleJoinRoom}
+            className="bg-amber-100 border-2 border-zinc-800 rounded-[32px] p-8 w-full max-w-sm shadow-[12px_12px_0px_#27272a] relative"
+          >
             <button
+              type="button"
               onClick={() => setIsJoinOpen(false)}
               className="absolute top-4 right-4 h-8 w-8 flex items-center justify-center bg-white border-2 border-zinc-800 rounded-full font-bold text-zinc-900 hover:bg-zinc-100 transition-transform"
             >
@@ -116,14 +149,18 @@ const Topbar = () => {
             </p>
             <input
               type="text"
-              placeholder="e.g. 8X9Y2Z"
-              maxLength={6}
-              className="w-full bg-white border-2 border-zinc-800 rounded-[16px] px-4 py-3 outline-none focus:shadow-[4px_4px_0px_#27272a] transition-shadow text-center text-2xl font-bold font-instrument tracking-widest uppercase mb-6"
+              name="roomCode"
+              placeholder="e.g. 64a7b8f..."
+              required
+              className="w-full bg-white border-2 border-zinc-800 rounded-[16px] px-4 py-3 outline-none focus:shadow-[4px_4px_0px_#27272a] transition-shadow text-center text-xl font-bold font-poppins mb-6"
             />
-            <button className="w-full py-3 bg-zinc-900 text-white font-bold font-poppins rounded-[24px] shadow-[4px_4px_0px_#fcd34d] hover:-translate-y-1 transition-all">
+            <button
+              type="submit"
+              className="w-full py-3 bg-zinc-900 text-white font-bold font-poppins rounded-[24px] shadow-[4px_4px_0px_#fcd34d] hover:-translate-y-1 transition-all"
+            >
               Join Now
             </button>
-          </div>
+          </form>
         </div>
       )}
 
@@ -133,7 +170,7 @@ const Topbar = () => {
           <div className="bg-white border-2 border-zinc-800 rounded-[32px] p-8 w-full max-w-md shadow-[12px_12px_0px_#27272a] relative">
             <button
               onClick={() => setIsNewBoardOpen(false)}
-              className="absolute top-4 right-4 h-8 w-8 flex items-center justify-center bg-zinc-100 border-2 border-zinc-800 rounded-full font-bold text-zinc-900"
+              className="absolute top-4 right-4 h-8 w-8 flex items-center justify-center bg-zinc-100 border-2 border-zinc-800 rounded-full font-bold text-zinc-900 hover:bg-zinc-200 transition-colors"
             >
               ✕
             </button>
@@ -152,8 +189,13 @@ const Topbar = () => {
                 />
               </div>
             </div>
-            <button className="w-full py-3 bg-blue-200 border-2 border-zinc-900 text-zinc-900 font-bold font-poppins rounded-[24px] shadow-[4px_4px_0px_#27272a] hover:shadow-[6px_6px_0px_#27272a] hover:-translate-y-1 transition-all">
-              Create & Enter Room
+            {/* Added onClick, disabled state, and dynamic text */}
+            <button
+              onClick={handleCreateRoom}
+              disabled={isCreating}
+              className="w-full py-3 bg-blue-200 border-2 border-zinc-900 text-zinc-900 font-bold font-poppins rounded-[24px] shadow-[4px_4px_0px_#27272a] hover:shadow-[6px_6px_0px_#27272a] hover:-translate-y-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isCreating ? "Creating..." : "Create & Enter Room"}
             </button>
           </div>
         </div>

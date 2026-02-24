@@ -1,4 +1,5 @@
-// src/modules/whiteboard/whiteboard.model.js
+// backend/src/modules/whiteboard/whiteboard.model.js
+
 import mongoose from "mongoose";
 
 const elementSchema = new mongoose.Schema(

@@ -1,4 +1,5 @@
-// src/modules/whiteboard/whiteboard.routes.js
+// backend/src/modules/whiteboard/whiteboard.routes.js
+
 import express from "express";
 import { saveSnapshot } from "./whiteboard.controller.js";
 import { requireAuth } from "../../middleware/auth.middleware.js";

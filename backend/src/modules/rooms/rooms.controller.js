@@ -3,11 +3,29 @@ import Room from "./rooms.model.js";
 
 export const createRoom = async (req, res) => {
   try {
-    const { maxParticipants } = req.body;
-    const room = await Room.create({ hostId: req.user.id, maxParticipants });
+    const { name, maxParticipants } = req.body;
+    const room = await Room.create({
+      name: name || "Untitled Board", // <-- ADDED THIS
+      hostId: req.user.id,
+      maxParticipants: maxParticipants || 10,
+    });
     res.status(201).json(room);
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+};
+
+// --- ADD THIS NEW CONTROLLER ---
+export const getUserRooms = async (req, res) => {
+  try {
+    // Fetch rooms where the user is either the host OR an invited participant
+    const rooms = await Room.find({
+      $or: [{ hostId: req.user.id }, { participants: req.user.id }],
+    }).sort({ createdAt: -1 }); // Newest first
+
+    res.status(200).json(rooms);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 };
 

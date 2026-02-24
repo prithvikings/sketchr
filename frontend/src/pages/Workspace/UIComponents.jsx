@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export const PropertiesPanel = ({
@@ -202,9 +202,9 @@ export const ChatPanel = ({
   isOpen,
   onClose,
   chatMessages,
-  setChatMessages,
   chatInput,
   setChatInput,
+  onSendMessage, // <-- ADDED THIS PROP
   onStartVideoCall,
 }) => (
   <AnimatePresence>
@@ -235,11 +235,13 @@ export const ChatPanel = ({
             </button>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 bg-white text-zinc-900">
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 bg-white text-zinc-900 custom-scrollbar">
           {chatMessages.map((m, i) => (
             <div
               key={i}
-              className={`p-3 rounded-xl border-2 border-zinc-900 shadow-[2px_2px_0px_#27272a] text-sm ${m.sender === "You" ? "bg-amber-200 self-end" : "bg-zinc-50 self-start"}`}
+              className={`p-3 rounded-xl border-2 border-zinc-900 shadow-[2px_2px_0px_#27272a] text-sm ${
+                m.isMe ? "bg-amber-200 self-end" : "bg-zinc-50 self-start"
+              }`}
             >
               <span className="font-bold block mb-1 text-xs opacity-70">
                 {m.sender}
@@ -248,22 +250,31 @@ export const ChatPanel = ({
             </div>
           ))}
         </div>
-        <div className="p-4 border-t-2 border-zinc-900 bg-[#f4f4f5]">
+        {/* Replace the bottom input area of your ChatPanel with this: */}
+        <div className="p-4 border-t-2 border-zinc-900 bg-[#f4f4f5] flex gap-2">
           <input
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && chatInput.trim()) {
-                setChatMessages([
-                  ...chatMessages,
-                  { sender: "You", text: chatInput.trim() },
-                ]);
+                onSendMessage(chatInput.trim());
                 setChatInput("");
               }
             }}
-            className="w-full border-2 border-zinc-900 rounded-xl px-3 py-2 outline-none focus:shadow-[2px_2px_0px_#27272a] transition-shadow bg-white text-zinc-900"
+            className="flex-1 w-full border-2 border-zinc-900 rounded-xl px-3 py-2 outline-none focus:shadow-[2px_2px_0px_#27272a] transition-shadow bg-white text-zinc-900 font-poppins text-sm"
             placeholder="Type a message..."
           />
+          <button
+            onClick={() => {
+              if (chatInput.trim()) {
+                onSendMessage(chatInput.trim());
+                setChatInput("");
+              }
+            }}
+            className="px-4 py-2 bg-amber-200 border-2 border-zinc-900 rounded-xl font-bold shadow-[2px_2px_0px_#27272a] hover:shadow-[4px_4px_0px_#27272a] hover:-translate-y-0.5 transition-all text-sm"
+          >
+            Send
+          </button>
         </div>
       </motion.div>
     )}
@@ -393,24 +404,90 @@ export const SettingsModal = ({ isOpen, onClose, theme, setTheme }) => (
     )}
   </AnimatePresence>
 );
+// Add this import at the top of UIComponents.jsx if you haven't already:
+// import { useEffect, useRef, useState } from 'react';
 
-export const VideoCallModal = ({ isOpen, onClose }) => {
+const VideoStream = ({ stream, isLocal, color, name, isVideoOff }) => {
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
+
+  if (isVideoOff || !stream) {
+    return (
+      <div
+        className={`w-full h-full flex items-center justify-center font-bold text-3xl text-white ${color}`}
+      >
+        {name ? name.charAt(0).toUpperCase() : "?"}
+      </div>
+    );
+  }
+
+  return (
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      muted={isLocal}
+      className={`w-full h-full object-cover ${isLocal ? "scale-x-[-1]" : ""}`}
+    />
+  );
+};
+// Add these props to your VideoCallModal component definition
+export const VideoCallModal = ({
+  isOpen,
+  onClose,
+  localStream = null,
+  peers = {},
+  toggleVideo,
+  toggleAudio,
+  toggleScreenShare, // New Prop
+  isScreenSharing, // New Prop
+  stopStream, // New Prop
+  userName = "You",
+}) => {
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [activeSpeakerId, setActiveSpeakerId] = useState("u1");
-
-  // Mock participants data
-  const participants = [
-    { id: "u1", name: "You", initials: "U1", color: "bg-zinc-700" },
-    { id: "u2", name: "Alice", initials: "AL", color: "bg-blue-500" },
-    { id: "u3", name: "Bob", initials: "BO", color: "bg-pink-500" },
-    { id: "u4", name: "Charlie", initials: "CH", color: "bg-amber-500" },
-  ];
+  const [activeSpeakerId, setActiveSpeakerId] = useState("local");
 
   if (!isOpen) return null;
 
-  const activeSpeaker = participants.find((p) => p.id === activeSpeakerId);
+  const allParticipants = [
+    {
+      id: "local",
+      name: userName,
+      stream: localStream,
+      isLocal: true,
+      color: "bg-zinc-700",
+      isVideoOff: isVideoOff,
+    },
+    ...Object.entries(peers).map(([peerId, data]) => ({
+      id: peerId,
+      name: data.name,
+      stream: data.stream,
+      isLocal: false,
+      color: data.color,
+      isVideoOff: false,
+    })),
+  ];
+
+  const activeSpeaker =
+    allParticipants.find((p) => p.id === activeSpeakerId) || allParticipants[0];
+
+  const handleToggleAudio = () => {
+    if (toggleAudio) setIsMuted(toggleAudio());
+  };
+  const handleToggleVideo = () => {
+    if (toggleVideo) setIsVideoOff(toggleVideo());
+  };
+
+  const handleEndCall = () => {
+    if (stopStream) stopStream(); // Kill the camera & mic
+    onClose(); // Close the modal
+  };
 
   return (
     <motion.div
@@ -420,76 +497,51 @@ export const VideoCallModal = ({ isOpen, onClose }) => {
       drag
       dragMomentum={false}
       onPointerDown={(e) => e.stopPropagation()}
-      className="absolute top-24 left-6 w-96 bg-white border-2 border-zinc-900 rounded-[24px] shadow-[8px_8px_0px_#27272a] flex flex-col overflow-hidden z-[80] pointer-events-auto"
+      // ADDED: resize, overflow-hidden, and min/max dimensions
+      className="absolute top-24 left-6 w-[400px] min-w-[320px] min-h-[300px] max-w-[80vw] max-h-[80vh] resize overflow-hidden bg-white border-2 border-zinc-900 rounded-[24px] shadow-[8px_8px_0px_#27272a] flex flex-col z-[80] pointer-events-auto"
     >
-      {/* Header */}
       <div className="flex justify-between items-center p-3 border-b-2 border-zinc-900 bg-[#f4f4f5] text-zinc-900 cursor-grab active:cursor-grabbing">
         <h2 className="font-bold text-sm flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-          Huddle ({participants.length})
+          Huddle ({allParticipants.length})
         </h2>
         <button
-          onClick={onClose}
-          className="hover:text-red-500 font-bold text-lg leading-none cursor-pointer transition-colors"
+          onClick={handleEndCall}
+          className="hover:text-red-500 font-bold text-lg leading-none transition-colors"
         >
           ✕
         </button>
       </div>
 
-      {/* Main Video View */}
-      <div className="bg-zinc-900 h-56 flex items-center justify-center relative overflow-hidden">
-        {activeSpeaker.id === "u1" && isScreenSharing ? (
-          <div className="text-white font-poppins font-bold flex flex-col items-center">
-            <span className="text-5xl mb-3">💻</span>
-            <span className="bg-amber-400 text-zinc-900 px-3 py-1 rounded-full text-sm">
-              Sharing Screen
-            </span>
-          </div>
-        ) : activeSpeaker.id === "u1" && isVideoOff ? (
-          <div className="w-24 h-24 rounded-full bg-zinc-700 flex items-center justify-center text-white font-bold text-3xl border-4 border-zinc-800">
-            {activeSpeaker.initials}
-          </div>
-        ) : (
-          <div className="flex flex-col items-center">
-            <div
-              className={`w-24 h-24 rounded-full ${activeSpeaker.color} flex items-center justify-center text-white font-bold text-3xl border-4 border-zinc-900 shadow-[6px_6px_0px_#000]`}
-            >
-              {activeSpeaker.initials}
-            </div>
-            <span className="text-white opacity-50 font-poppins text-sm mt-4 animate-pulse">
-              Live Feed...
-            </span>
-          </div>
-        )}
-
-        {/* Status Badge */}
+      {/* CHANGED: h-56 is now flex-1 to stretch dynamically when resized */}
+      <div className="bg-zinc-900 flex-1 min-h-[200px] flex items-center justify-center relative overflow-hidden">
+        <VideoStream
+          stream={activeSpeaker.stream}
+          isLocal={activeSpeaker.isLocal && !isScreenSharing}
+          color={activeSpeaker.color}
+          name={activeSpeaker.name}
+          isVideoOff={activeSpeaker.isVideoOff}
+        />
         <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-zinc-700 text-white text-xs font-poppins font-bold flex items-center gap-2">
-          {activeSpeaker.name} {activeSpeaker.id === "u1" && isMuted && "🔇"}
+          {activeSpeaker.name} {activeSpeaker.isLocal && isMuted && "🔇"}
         </div>
       </div>
 
-      {/* Thumbnails Strip */}
-      <div className="bg-zinc-800 p-3 border-b-2 border-zinc-900 flex gap-3 overflow-x-auto custom-scrollbar">
-        {participants.map((p) => (
+      <div className="bg-zinc-800 p-3 border-b-2 border-zinc-900 flex gap-3 overflow-x-auto custom-scrollbar min-h-[88px] shrink-0">
+        {allParticipants.map((p) => (
           <button
             key={p.id}
             onClick={() => setActiveSpeakerId(p.id)}
-            className={`relative shrink-0 w-24 h-16 rounded-xl border-2 overflow-hidden transition-all ${
-              activeSpeakerId === p.id
-                ? "border-amber-400 shadow-[0_0_0_2px_rgba(251,191,36,0.3)] -translate-y-1"
-                : "border-zinc-600 hover:border-zinc-400 hover:-translate-y-0.5"
-            }`}
+            className={`relative shrink-0 w-24 h-16 rounded-xl border-2 overflow-hidden transition-all ${activeSpeakerId === p.id ? "border-amber-400 shadow-[0_0_0_2px_rgba(251,191,36,0.3)] -translate-y-1" : "border-zinc-600 hover:border-zinc-400 hover:-translate-y-0.5"}`}
           >
-            <div className="absolute inset-0 bg-zinc-900 flex items-center justify-center">
-              {p.id === "u1" && isVideoOff ? (
-                <span className="text-zinc-500 font-bold">{p.initials}</span>
-              ) : (
-                <div
-                  className={`w-8 h-8 rounded-full ${p.color} flex items-center justify-center text-white text-xs font-bold`}
-                >
-                  {p.initials}
-                </div>
-              )}
+            <div className="absolute inset-0 bg-zinc-900 flex items-center justify-center pointer-events-none">
+              <VideoStream
+                stream={p.stream}
+                isLocal={p.isLocal && !isScreenSharing}
+                color={p.color}
+                name={p.name}
+                isVideoOff={p.isVideoOff}
+              />
             </div>
             <div className="absolute bottom-1 left-1 bg-black/70 px-1.5 py-0.5 rounded text-[10px] font-bold text-white truncate max-w-[calc(100%-8px)]">
               {p.name}
@@ -498,45 +550,45 @@ export const VideoCallModal = ({ isOpen, onClose }) => {
         ))}
       </div>
 
-      {/* Controls */}
-      <div className="p-4 bg-[#f4f4f5] flex justify-center gap-4">
+      <div className="p-4 bg-[#f4f4f5] flex justify-center gap-4 shrink-0">
         <button
-          onClick={() => setIsMuted(!isMuted)}
-          className={`w-12 h-12 rounded-[16px] border-2 border-zinc-900 flex items-center justify-center transition-all shadow-[2px_2px_0px_#27272a] hover:shadow-[4px_4px_0px_#27272a] hover:-translate-y-0.5 ${
-            isMuted ? "bg-red-200" : "bg-white"
-          }`}
-          title={isMuted ? "Unmute" : "Mute"}
+          onClick={handleToggleAudio}
+          className={`w-12 h-12 rounded-[16px] border-2 border-zinc-900 flex items-center justify-center transition-all shadow-[2px_2px_0px_#27272a] ${isMuted ? "bg-red-200" : "bg-white"}`}
         >
           {isMuted ? "🔇" : "🎤"}
         </button>
         <button
-          onClick={() => setIsVideoOff(!isVideoOff)}
-          className={`w-12 h-12 rounded-[16px] border-2 border-zinc-900 flex items-center justify-center transition-all shadow-[2px_2px_0px_#27272a] hover:shadow-[4px_4px_0px_#27272a] hover:-translate-y-0.5 ${
-            isVideoOff ? "bg-red-200" : "bg-white"
-          }`}
-          title={isVideoOff ? "Turn Video On" : "Turn Video Off"}
+          onClick={handleToggleVideo}
+          className={`w-12 h-12 rounded-[16px] border-2 border-zinc-900 flex items-center justify-center transition-all shadow-[2px_2px_0px_#27272a] ${isVideoOff ? "bg-red-200" : "bg-white"}`}
         >
           {isVideoOff ? "🚫" : "📷"}
         </button>
+        {/* NEW SCREEN SHARE LOGIC */}
         <button
           onClick={() => {
-            setIsScreenSharing(!isScreenSharing);
-            if (!isScreenSharing) setActiveSpeakerId("u1"); // Auto-focus yourself when sharing
+            if (toggleScreenShare) toggleScreenShare();
           }}
-          className={`w-12 h-12 rounded-[16px] border-2 border-zinc-900 flex items-center justify-center transition-all shadow-[2px_2px_0px_#27272a] hover:shadow-[4px_4px_0px_#27272a] hover:-translate-y-0.5 ${
-            isScreenSharing ? "bg-amber-200" : "bg-white"
-          }`}
-          title={isScreenSharing ? "Stop Sharing" : "Share Screen"}
+          className={`w-12 h-12 rounded-[16px] border-2 border-zinc-900 flex items-center justify-center transition-all shadow-[2px_2px_0px_#27272a] ${isScreenSharing ? "bg-amber-200" : "bg-white"}`}
         >
           💻
         </button>
         <button
-          onClick={onClose}
-          className="w-12 h-12 rounded-[16px] border-2 border-zinc-900 bg-red-500 text-white flex items-center justify-center transition-all shadow-[2px_2px_0px_#27272a] hover:shadow-[4px_4px_0px_#27272a] hover:-translate-y-0.5 hover:bg-red-600"
-          title="Leave Call"
+          onClick={handleEndCall}
+          className="w-12 h-12 rounded-[16px] border-2 border-zinc-900 bg-red-500 text-white flex items-center justify-center transition-all shadow-[2px_2px_0px_#27272a]"
         >
           📞
         </button>
+      </div>
+      {/* Resizer Icon indicator for UX */}
+      <div className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize flex items-end justify-end p-1 pointer-events-none opacity-50">
+        <svg viewBox="0 0 10 10" width="10" height="10">
+          <path
+            d="M 8 10 L 10 10 L 10 8 M 4 10 L 10 4 M 0 10 L 10 0"
+            stroke="currentColor"
+            fill="none"
+            strokeWidth="1"
+          />
+        </svg>
       </div>
     </motion.div>
   );

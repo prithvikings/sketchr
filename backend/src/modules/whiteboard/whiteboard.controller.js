@@ -1,4 +1,5 @@
-// src/modules/whiteboard/whiteboard.controller.js
+// backend/src/modules/whiteboard/whiteboard.controller.js
+
 import Whiteboard from "./whiteboard.model.js";
 
 export const saveSnapshot = async (req, res) => {
