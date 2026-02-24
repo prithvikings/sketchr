@@ -9,7 +9,7 @@ const Navbar = () => {
   ];
   return <div className="p-4 px-8 flex items-center justify-between font-poppins">
     <div className="leftlogo">
-      <h1 className="text-3xl font-instrument font-medium text-zinc-700">Sketchr</h1>
+      <h1 className="text-3xl font-instrument font-medium text-zinc-700">Sketchr.</h1>
     </div>
     <div className="right flex items-center gap-8">
       <div className="links flex items-center gap-6 text-[13px]">

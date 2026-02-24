@@ -4,7 +4,7 @@ const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
 
   return (
-    <div className="min-h-screen w-full bg-primarybackground flex items-center justify-center p-4 font-poppins overflow-hidden relative z-10">
+    <div className="min-h-screen w-full bg-primarybackground flex items-center justify-center px-4 font-poppins overflow-hidden relative z-10">
       
       {/* Decorative Background Elements */}
       <div className="absolute top-[-5%] left-[-5%] w-96 h-96 border-4 border-dashed border-zinc-300 rounded-full z-0 opacity-40 pointer-events-none" />
@@ -13,7 +13,6 @@ const Auth = () => {
       {/* Main Auth Card */}
       <div className="w-full max-w-5xl bg-white border-2 border-zinc-900 rounded-[32px] shadow-[16px_16px_0px_#27272a] flex flex-col md:flex-row overflow-hidden relative z-10">
         
-        {/* LEFT SIDE: Form Section */}
         <div className="w-full md:w-1/2 p-8 md:p-12 flex flex-col justify-center">
           
           {/* Logo */}

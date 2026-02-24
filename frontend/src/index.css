@@ -16,6 +16,7 @@
   --color-primarybackground: #F2E6CA; 
   --color-secondarybackground: #F9F4EA; 
   --color-dragcard: #F9F4EA;
+  --font-handwriting: ['Caveat', 'cursive'],
 }
 
 @theme inline {
@@ -135,4 +136,46 @@
   body {
     @apply bg-background text-foreground;
     }
+}
+
+
+@layer utilities {
+  /* Hides the scrollbar completely but allows scrolling (used for TOC) */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Sleek, modern scrollbar for the Sidebar */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  /* Make the track invisible so it doesn't create a harsh border */
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  /* Light mode thumb */
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #e4e4e7; /* Tailwind zinc-200 */
+    border-radius: 10px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: #d4d4d8; /* Tailwind zinc-300 */
+  }
+
+  /* Dark mode thumb */
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #27272a; /* Tailwind zinc-800 */
+  }
+
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: #3f3f46; /* Tailwind zinc-700 */
+  }
 }

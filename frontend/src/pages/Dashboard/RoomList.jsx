@@ -1,7 +1,86 @@
+import React, { useLayoutEffect, useRef } from 'react';
+import { gsap } from 'gsap';
+
 const RoomList = () => {
+  const containerRef = useRef(null);
+
+  // Mock data for active rooms
+  const activeRooms = [
+    { id: 1, name: 'Design Sync - Q4', users: 4, status: 'Live', color: 'bg-green-100' },
+    { id: 2, name: 'Marketing Campaign Brainstorm', users: 2, status: 'Live', color: 'bg-blue-100' },
+    { id: 3, name: 'Dev Architecture Review', users: 6, status: 'Live', color: 'bg-amber-100' },
+  ];
+
+  // GSAP Entrance Animation
+  useLayoutEffect(() => {
+    let ctx = gsap.context(() => {
+      gsap.fromTo(
+        '.room-item',
+        { x: -30, opacity: 0 },
+        { 
+          x: 0, 
+          opacity: 1, 
+          stagger: 0.15, 
+          duration: 0.5, 
+          ease: 'power3.out',
+          clearProps: 'all' // Clears inline styles so Tailwind hover effects work afterward
+        }
+      );
+    }, containerRef);
+
+    return () => ctx.revert(); // Cleanup
+  }, []);
+
   return (
-    <div>
-      <h2>Room List</h2>
+    <div ref={containerRef} className="mt-16 w-full pb-12">
+      
+      {/* Section Header with Dashed Divider */}
+      <div className="flex items-end justify-between mb-8 border-b-1 border-dashed border-zinc-400 pb-4">
+        <div>
+          <h2 className="font-instrument text-3xl font-bold text-zinc-900">Active Rooms</h2>
+          <p className="text-zinc-600 font-poppins text-lg mt-1">Jump into a live session.</p>
+        </div>
+        <button className="hidden md:block px-5 py-2 bg-white border-2 border-zinc-800 rounded-[32px] font-bold text-zinc-800 shadow-[4px_4px_0px_#27272a] hover:shadow-[6px_6px_0px_#27272a] hover:-translate-y-0.5 transition-all">
+          View All
+        </button>
+      </div>
+
+      {/* Room List */}
+      <div className="flex flex-col gap-6">
+        {activeRooms.map((room) => (
+          <div 
+            key={room.id}
+            className="room-item flex flex-col md:flex-row md:items-center justify-between p-6 bg-white border-2 border-zinc-800 rounded-[32px] shadow-[6px_6px_0px_#27272a] hover:shadow-[10px_10px_0px_#27272a] hover:-translate-y-1 transition-all duration-200"
+          >
+            {/* Room Info */}
+            <div className="flex items-center gap-5 mb-6 md:mb-0">
+              <div className={`w-14 h-14 rounded-[20px] border-2 border-zinc-800 flex items-center justify-center shadow-[4px_4px_0px_#27272a] ${room.color}`}>
+                <span className="font-instrument text-2xl font-bold text-zinc-900">
+                  {room.name.charAt(0)}
+                </span>
+              </div>
+              <div>
+                <h3 className="font-bold text-zinc-900 font-poppins text-xl">{room.name}</h3>
+                <div className="flex items-center gap-2 mt-1.5">
+                  {/* Live Ping Indicator */}
+                  <span className="flex h-3 w-3 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500 border border-zinc-900"></span>
+                  </span>
+                  <span className="text-sm text-zinc-600 font-poppins font-medium">
+                    {room.status} • {room.users} online
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Action Button */}
+            <button className="w-full md:w-auto px-8 py-3 bg-zinc-900 text-white rounded-[32px] font-bold border-2 border-zinc-900 hover:shadow-[4px_4px_0px_#fcd34d] hover:-translate-y-1 transition-all">
+              Join Room
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
