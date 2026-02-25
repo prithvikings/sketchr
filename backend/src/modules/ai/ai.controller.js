@@ -1,14 +1,20 @@
 // src/modules/ai/ai.controller.js
-import crypto from "crypto";
+import crypto from "node:crypto";
 import User from "../auth/auth.model.js";
 
+// Must match the exact logic from users.controller.js
+const getEncryptionKey = () => {
+  const secret = process.env.ENCRYPTION_KEY || "default_development_secret_key";
+  return crypto.createHash("sha256").update(secret).digest();
+};
+
 const decryptKey = (encryptedHex, ivHex) => {
+  const key = getEncryptionKey();
   const decipher = crypto.createDecipheriv(
-    "aes-256-gcm",
-    Buffer.from(process.env.ENCRYPTION_KEY, "hex"),
+    "aes-256-cbc",
+    key,
     Buffer.from(ivHex, "hex"),
   );
-  // Note: GCM requires an auth tag in production. This is simplified for rendering.
   let decrypted = decipher.update(encryptedHex, "hex", "utf8");
   return decrypted + decipher.final("utf8");
 };
@@ -18,33 +24,57 @@ export const generateFlowchart = async (req, res) => {
     const { prompt } = req.body;
     const user = await User.findById(req.user.id);
 
-    if (!user?.encryptedApiKey) throw new Error("No AI API key provided");
+    if (!user?.encryptedApiKey)
+      throw new Error("No Gemini API key provided. Add it in settings.");
+
+    // Decrypt the key
     const apiKey = decryptKey(user.encryptedApiKey, user.iv);
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent`;
+
+    const response = await fetch(url, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
       },
       body: JSON.stringify({
-        model: "gpt-4-turbo",
-        response_format: { type: "json_object" },
-        messages: [
+        systemInstruction: {
+          parts: [
+            {
+              text: "You are a flowchart architect. Return ONLY valid JSON. The JSON must contain two arrays: 'nodes' [{id: string, type: string, label: string}] and 'connectors' [{sourceId: string, targetId: string}]. Do not include markdown formatting or explanations.",
+            },
+          ],
+        },
+        contents: [
           {
-            role: "system",
-            content:
-              "Return ONLY valid JSON with two arrays: 'nodes' [{id, type, label}] and 'connectors' [{sourceId, targetId}].",
+            role: "user",
+            parts: [{ text: prompt }],
           },
-          { role: "user", content: prompt },
         ],
+        generationConfig: {
+          responseMimeType: "application/json",
+        },
       }),
     });
 
-    if (!response.ok) throw new Error("External AI Provider Error");
     const data = await response.json();
-    res.status(200).json(JSON.parse(data.choices[0].message.content));
+
+    if (!response.ok) {
+      throw new Error(data.error?.message || "External AI Provider Error");
+    }
+
+    let responseText = data.candidates[0].content.parts[0].text;
+
+    // STRIP MARKDOWN: Safely remove ```json and ``` if the AI added them
+    responseText = responseText
+      .replace(/```json/gi, "")
+      .replace(/```/g, "")
+      .trim();
+
+    res.status(200).json(JSON.parse(responseText));
   } catch (error) {
+    console.error("[AI_GEN_ERROR]", error);
     res.status(400).json({ error: error.message });
   }
 };

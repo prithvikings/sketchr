@@ -12,6 +12,8 @@ const Settings = () => {
     fullName: user?.fullName || "",
     email: user?.email || "",
   });
+  const [apiKey, setApiKey] = useState("");
+  const [isKeySaving, setIsKeySaving] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
   useLayoutEffect(() => {
@@ -51,6 +53,24 @@ const Settings = () => {
       alert(err.response?.data?.error || "Update failed");
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleSaveApiKey = async (e) => {
+    e.preventDefault();
+    setIsKeySaving(true);
+    try {
+      await api.post("/users/api-key", { apiKey });
+
+      // Instead of clearing it to "", change it to a masked string
+      // so the user knows it was accepted and saved.
+      setApiKey("••••••••••••••••••••••••••••");
+
+      alert("API Key encrypted and saved securely.");
+    } catch (err) {
+      alert(err.response?.data?.error || "Failed to save API Key");
+    } finally {
+      setIsKeySaving(false);
     }
   };
 
@@ -150,6 +170,38 @@ const Settings = () => {
               Dark Mode (Coming Soon)
             </button>
           </div>
+        </section>
+
+        <section className="settings-card bg-purple-100 border-2 border-zinc-800 rounded-[32px] p-8 shadow-[8px_8px_0px_#27272a] hover:shadow-[12px_12px_0px_#27272a] hover:-translate-y-1 transition-all duration-200">
+          <h3 className="font-instrument text-2xl font-bold text-zinc-900 mb-2">
+            AI Configuration
+          </h3>
+          <p className="text-zinc-700 font-poppins text-sm mb-6">
+            Enter your OpenAI API key to enable text-to-canvas generation. Your
+            key is encrypted at rest using AES-256-GCM.
+          </p>
+          <form onSubmit={handleSaveApiKey} className="flex flex-col gap-6">
+            <div>
+              <label className="block text-zinc-800 font-bold mb-2 text-sm">
+                OpenAI API Key
+              </label>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="AIzaSy..."
+                required
+                className="w-full bg-white border-2 border-zinc-800 rounded-[16px] px-4 py-3 outline-none focus:shadow-[4px_4px_0px_#27272a] transition-shadow text-zinc-900 font-mono"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={isKeySaving}
+              className="self-start px-8 py-3 bg-zinc-900 text-white font-bold rounded-[32px] hover:shadow-[4px_4px_0px_#fcd34d] hover:-translate-y-1 transition-all disabled:opacity-50"
+            >
+              {isKeySaving ? "Encrypting & Saving..." : "Save API Key"}
+            </button>
+          </form>
         </section>
 
         {/* Danger Zone */}

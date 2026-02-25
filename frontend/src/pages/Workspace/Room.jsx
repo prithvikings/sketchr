@@ -31,6 +31,7 @@ import {
   ShareModal,
   SettingsModal,
   VideoCallModal,
+  AIModal,
 } from "./UIComponents";
 
 // --- CURSOR COMPONENT ---
@@ -146,10 +147,14 @@ const Room = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
 
+  // AI States
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+
   // --- ACCESS CONTROL & LOBBY STATE ---
-  const [accessStatus, setAccessStatus] = useState("checking"); // checking, request_needed, waiting, granted, rejected
+  const [accessStatus, setAccessStatus] = useState("checking");
   const [isHost, setIsHost] = useState(false);
-  const [joinRequests, setJoinRequests] = useState([]); // List of people knocking
+  const [joinRequests, setJoinRequests] = useState([]);
   const [boardName, setBoardName] = useState("Loading...");
 
   // Verify access permissions on load
@@ -166,9 +171,9 @@ const Room = () => {
 
         if (isUserHost || isParticipant) {
           setIsHost(isUserHost);
-          setAccessStatus("granted"); // Open the gates
+          setAccessStatus("granted");
         } else {
-          setAccessStatus("request_needed"); // Show the lobby door
+          setAccessStatus("request_needed");
         }
       } catch (err) {
         setAccessStatus("rejected");
@@ -179,17 +184,15 @@ const Room = () => {
 
   const handleRequestAccess = () => {
     setAccessStatus("waiting");
-    const socket = initSocket(); // Boot up socket just to knock
+    const socket = initSocket();
     socket.emit("request_join", {
       roomId,
       user: { id: user.id, name: user.fullName },
     });
 
-    // Listen for the host's decision
     socket.on("join_request_resolved", async ({ status }) => {
       if (status === "accepted") {
         try {
-          // Permanently save to DB so they don't have to knock if they refresh
           await api.post(`/rooms/${roomId}/join`);
           setAccessStatus("granted");
         } catch (err) {
@@ -316,15 +319,21 @@ const Room = () => {
     width === 4 ? 16 : width === 8 ? 24 : width === 16 ? 48 : 64;
 
   const activeUsers = [
-    { id: "local", name: user?.fullName || "You", color: "#3f3f46" },
+    {
+      id: "local",
+      name: user?.fullName || "You",
+      color: "#3f3f46",
+      avatar: user?.avatar,
+    },
     ...Object.entries(cursors).map(([socketId, cursorData]) => ({
       id: socketId,
       name: cursorData.name,
       color: cursorData.color,
+      avatar: cursorData.avatar,
     })),
   ];
 
-  // --- MAIN WEBSOCKET INITIALIZATION (ONLY RUNS IF GRANTED) ---
+  // --- WEBSOCKET INITIALIZATION ---
   useEffect(() => {
     if (accessStatus !== "granted" || !roomId) return;
     const socket = initSocket();
@@ -350,11 +359,11 @@ const Room = () => {
           y: -10000,
           name: user?.fullName || "Anonymous",
           color: myCursorColor.current,
+          avatar: user?.avatar,
         },
       });
     });
 
-    // Handle Incoming Lobby Requests (Host Only)
     socket.on("incoming_join_request", ({ guestSocketId, guestUser }) => {
       if (isHost) {
         setJoinRequests((prev) => [...prev, { guestSocketId, guestUser }]);
@@ -450,7 +459,6 @@ const Room = () => {
   const handleExportImage = async (format) => {
     const node = document.getElementById("canvas-viewport");
     if (!node) return;
-
     setSelectedIds([]);
 
     setTimeout(async () => {
@@ -546,6 +554,7 @@ const Room = () => {
   useEffect(() => {
     const handleKeyDown = (e) => {
       const key = e.key.toLowerCase();
+      if (key === "g") setIsAIModalOpen(true);
       if (key === "escape") {
         if (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT")
           e.target.blur();
@@ -760,6 +769,7 @@ const Room = () => {
           y: currentY,
           name: user?.fullName || "Anonymous",
           color: myCursorColor.current,
+          avatar: user?.avatar,
         },
       });
       lastCursorEmit.current = now;
@@ -1132,6 +1142,117 @@ const Room = () => {
     );
   }
 
+  // --- AI HANDLER WITH SHIMMER LOGIC ---
+  const handleAIGenerate = async (prompt) => {
+    setIsAIModalOpen(false); // Close instantly
+    setIsGenerating(true); // Show shimmer UI
+
+    try {
+      const res = await api.post("/ai/flowchart", { prompt });
+
+      const nodes = res.data.nodes || [];
+      const connectors = res.data.connectors || [];
+
+      let currentX = 2500 - 300;
+      let currentY = 2500 - 200;
+
+      const nodeMap = {};
+      const newShapes = [];
+      const newTexts = [];
+
+      nodes.forEach((node, i) => {
+        const id = Date.now().toString() + "-node-" + i;
+        nodeMap[node.id] = {
+          id,
+          x: currentX,
+          y: currentY,
+          width: 220,
+          height: 80,
+        };
+
+        newShapes.push({
+          id,
+          type: "node",
+          shapeType: "square",
+          category: "shapes",
+          startX: currentX,
+          startY: currentY,
+          currentX: currentX + 220,
+          currentY: currentY + 80,
+          color: "#18181b",
+          strokeWidth: 4,
+          width: 220,
+          height: 80,
+          x: currentX,
+          y: currentY,
+        });
+        newTexts.push({
+          id: id + "-text",
+          type: "text",
+          category: "texts",
+          text: node.label,
+          color: "#18181b",
+          size: 16,
+          x: currentX + 20,
+          y: currentY + 30,
+          width: 180,
+          height: 40,
+        });
+
+        currentX += 300;
+        if (i > 0 && (i + 1) % 3 === 0) {
+          currentX = 2500 - 300;
+          currentY += 150;
+        }
+      });
+
+      connectors.forEach((conn, i) => {
+        const src = nodeMap[conn.sourceId];
+        const tgt = nodeMap[conn.targetId];
+        if (src && tgt) {
+          newShapes.push({
+            id: Date.now().toString() + "-conn-" + i,
+            type: "node",
+            shapeType: "arrow",
+            category: "shapes",
+            startX: src.x + src.width,
+            startY: src.y + src.height / 2,
+            currentX: tgt.x,
+            currentY: tgt.y + tgt.height / 2,
+            color: "#18181b",
+            strokeWidth: 4,
+            width: Math.abs(tgt.x - (src.x + src.width)),
+            height: Math.abs(tgt.y - src.y),
+            x: Math.min(src.x + src.width, tgt.x),
+            y: Math.min(src.y + src.height / 2, tgt.y + tgt.height / 2),
+          });
+        }
+      });
+
+      saveState((prev) => ({
+        ...prev,
+        shapes: [...prev.shapes, ...newShapes],
+        texts: [...prev.texts, ...newTexts],
+      }));
+
+      const socket = getSocket();
+      newShapes.forEach((el) =>
+        socket?.emit("add_element", { roomId, element: el }),
+      );
+      newTexts.forEach((el) =>
+        socket?.emit("add_element", { roomId, element: el }),
+      );
+    } catch (err) {
+      console.error(err);
+      alert(
+        err.response?.data?.error ||
+          "AI Generation failed. Check API Key in Settings.",
+      );
+    } finally {
+      setIsGenerating(false); // Hide shimmer UI
+    }
+  };
+
   // ==========================================
   // MAIN CANVAS RENDER (If Granted)
   // ==========================================
@@ -1185,6 +1306,16 @@ const Room = () => {
         ref={roomRef}
         className="absolute inset-0 flex flex-col pointer-events-none z-50"
       >
+        <AIModal
+          isOpen={activeTool === "ai" || isAIModalOpen}
+          onClose={() => {
+            setActiveTool("cursor");
+            setIsAIModalOpen(false);
+          }}
+          onGenerate={handleAIGenerate}
+          isGenerating={isGenerating}
+        />
+
         <Header
           theme={theme}
           boardName={boardName}
@@ -1249,6 +1380,50 @@ const Room = () => {
           setTheme={setTheme}
         />
 
+        {/* AI GENERATING SHIMMER OVERLAY */}
+        <AnimatePresence>
+          {isGenerating && (
+            <motion.div
+              initial={{ y: -50, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -20, opacity: 0 }}
+              className="absolute top-28 left-1/2 -translate-x-1/2 z-[100] pointer-events-none"
+            >
+              <div className="bg-purple-200 border-2 border-zinc-900 rounded-full shadow-[6px_6px_0px_#27272a] px-6 py-3 flex items-center gap-4 relative overflow-hidden">
+                <motion.div
+                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-transparent w-[200%]"
+                  animate={{ x: ["-100%", "100%"] }}
+                  transition={{
+                    repeat: Infinity,
+                    duration: 1.2,
+                    ease: "linear",
+                  }}
+                />
+                <div className="flex gap-1.5 relative z-10">
+                  <motion.span
+                    animate={{ y: [0, -6, 0] }}
+                    transition={{ repeat: Infinity, duration: 0.6, delay: 0 }}
+                    className="w-3 h-3 bg-zinc-900 rounded-full"
+                  ></motion.span>
+                  <motion.span
+                    animate={{ y: [0, -6, 0] }}
+                    transition={{ repeat: Infinity, duration: 0.6, delay: 0.1 }}
+                    className="w-3 h-3 bg-zinc-900 rounded-full"
+                  ></motion.span>
+                  <motion.span
+                    animate={{ y: [0, -6, 0] }}
+                    transition={{ repeat: Infinity, duration: 0.6, delay: 0.2 }}
+                    className="w-3 h-3 bg-zinc-900 rounded-full"
+                  ></motion.span>
+                </div>
+                <span className="font-bold font-poppins text-zinc-900 text-sm relative z-10">
+                  Drafting Architecture...
+                </span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div className="pointer-events-auto">
           <PropertiesPanel
             activeColor={activeColor}
@@ -1289,7 +1464,6 @@ const Room = () => {
             ref={selectionDivRef}
             className="absolute border border-blue-500 bg-blue-500/10 z-50 pointer-events-none hidden"
           />
-
           <svg
             ref={draftContainerRef}
             className="absolute inset-0 w-full h-full pointer-events-none z-0 overflow-visible hidden"

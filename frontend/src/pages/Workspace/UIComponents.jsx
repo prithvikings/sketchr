@@ -70,6 +70,7 @@ export const BottomToolbar = ({
     { id: "arrow", icon: "↗️", shortcut: "A" },
     { id: "text", icon: "T", shortcut: "T" },
     { id: "sticky", icon: "📝", shortcut: "S" },
+    { id: "ai", icon: "✨", shortcut: "G" },
   ];
   return (
     <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3 z-40 ui-panel font-poppins pointer-events-auto">
@@ -668,5 +669,62 @@ export const VideoCallModal = ({
         </svg>
       </div>
     </motion.div>
+  );
+};
+
+// ADD TO src/pages/Workspace/UIComponents.jsx (Append this below your existing exports)
+
+export const AIModal = ({ isOpen, onClose, onGenerate, isGenerating }) => {
+  const [prompt, setPrompt] = useState("");
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (prompt.trim() && !isGenerating) onGenerate(prompt);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-900/50 pointer-events-auto"
+      onPointerDown={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        onPointerDown={(e) => e.stopPropagation()}
+        className="bg-purple-100 border-2 border-zinc-900 rounded-[32px] p-8 shadow-[8px_8px_0px_#27272a] max-w-lg w-full relative text-zinc-900 font-poppins"
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-6 right-6 font-bold hover:text-red-500 text-xl leading-none"
+        >
+          ✕
+        </button>
+        <h2 className="font-instrument text-3xl font-bold mb-2 flex items-center gap-2">
+          ✨ AI Canvas Generation
+        </h2>
+        <p className="text-zinc-700 text-sm mb-6">
+          Describe a flowchart, architecture, or mindmap. The AI will draw it
+          instantly.
+        </p>
+        <form onSubmit={handleSubmit}>
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="e.g. A user authentication flow with login, register, and database validation..."
+            className="w-full bg-white border-2 border-zinc-900 rounded-[16px] px-4 py-3 outline-none focus:shadow-[4px_4px_0px_#27272a] transition-shadow text-zinc-900 font-poppins mb-4 resize-none h-32"
+          />
+          <button
+            type="submit"
+            disabled={isGenerating || !prompt.trim()}
+            className="w-full py-3 bg-zinc-900 text-white font-bold rounded-[24px] shadow-[4px_4px_0px_#fcd34d] hover:-translate-y-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isGenerating ? "Generating Architecture..." : "Draw Flowchart"}
+          </button>
+        </form>
+      </motion.div>
+    </div>
   );
 };
