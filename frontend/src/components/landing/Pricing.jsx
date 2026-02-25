@@ -1,63 +1,131 @@
 import React from "react";
 
 const Pricing = () => {
+  // Function to load the Razorpay script dynamically
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  // Dummy Payment Handler
+  const handlePayment = async (plan) => {
+    // If it's a free plan, just show an alert or redirect
+    if (plan.price === "Free") {
+      alert("Starter plan selected! Redirecting to dashboard...");
+      return;
+    }
+
+    const isLoaded = await loadRazorpayScript();
+
+    if (!isLoaded) {
+      alert(
+        "Failed to load Razorpay SDK. Please check your internet connection.",
+      );
+      return;
+    }
+
+    // Razorpay configuration options
+    const options = {
+      // Pulling the key securely from the Vite environment variables
+      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+      amount: plan.rawAmount, // Amount is in currency subunits (paise)
+      currency: "INR", // Using INR for typical Razorpay tests, but supports USD
+      name: "Sketchr.",
+      description: `${plan.name} Plan - ${plan.billing}`,
+      image:
+        "https://upload.wikimedia.org/wikipedia/commons/a/a7/React-icon.svg", // Replace with your actual logo
+      handler: function (response) {
+        // This function runs on successful payment
+        alert(
+          `Payment Successful! 🎉\nPayment ID: ${response.razorpay_payment_id}\nWelcome to the ${plan.name} plan!`,
+        );
+      },
+      prefill: {
+        name: "Sketchr User",
+        email: "user@sketchr.com",
+        contact: "9999999999",
+      },
+      theme: {
+        color: "#18181b", // Matches your zinc-900 brutalist theme
+      },
+    };
+
+    const paymentObject = new window.Razorpay(options);
+    paymentObject.open();
+  };
+
   const plans = [
     {
       target: "Student & Hobbyist",
       name: "Starter",
       price: "Free",
+      rawAmount: 0,
       billing: "Forever",
       description: "Perfect for personal projects and university assignments.",
       color: "bg-white",
-      buttonStyle: "bg-zinc-100 text-zinc-900 border-2 border-zinc-800 hover:bg-zinc-200",
+      buttonStyle:
+        "bg-zinc-100 text-zinc-900 border-2 border-zinc-800 hover:bg-zinc-200",
       features: [
         "Up to 3 active boards",
         "Standard templates",
         "7-day version history",
         "Export to PNG",
-        "Community support"
-      ]
+        "Community support",
+      ],
     },
     {
       target: "Professional",
       name: "Pro",
       price: "$12",
+      rawAmount: 100000, // Roughly 1000 INR -> 100000 paise for the dummy payment
       billing: "per user / month",
-      description: "For freelancers and solo designers who need unlimited power.",
+      description:
+        "For freelancers and solo designers who need unlimited power.",
       color: "bg-amber-100", // Highlighted color
       isPopular: true,
-      buttonStyle: "bg-zinc-900 text-white border-2 border-zinc-900 hover:bg-zinc-800",
+      buttonStyle:
+        "bg-zinc-900 text-white border-2 border-zinc-900 hover:bg-zinc-800",
       features: [
         "Unlimited boards",
         "Custom template creation",
         "30-day version history",
         "Export to PDF & SVG",
         "Priority email support",
-        "Private guest links"
-      ]
+        "Private guest links",
+      ],
     },
     {
       target: "Business",
       name: "Team",
       price: "$49",
+      rawAmount: 410000, // Roughly 4100 INR -> 410000 paise
       billing: "flat rate / month",
-      description: "For agencies and product teams scaling their collaboration.",
+      description:
+        "For agencies and product teams scaling their collaboration.",
       color: "bg-white",
-      buttonStyle: "bg-zinc-100 text-zinc-900 border-2 border-zinc-800 hover:bg-zinc-200",
+      buttonStyle:
+        "bg-zinc-100 text-zinc-900 border-2 border-zinc-800 hover:bg-zinc-200",
       features: [
         "Everything in Pro",
         "Unlimited team members",
         "Unlimited version history",
         "SSO & Advanced Security",
         "Shared team workspaces",
-        "24/7 dedicated support"
-      ]
-    }
+        "24/7 dedicated support",
+      ],
+    },
   ];
 
   return (
-    <div className="py-24 md:py-32 px-4 md:px-8 w-full font-poppins relative z-10 bg-secondarybackground border-t border-dashed border-zinc-400">
-      
+    <div
+      className="py-24 md:py-32 px-4 md:px-8 w-full font-poppins relative z-10 bg-secondarybackground border-t border-dashed border-zinc-400"
+      id="pricing"
+    >
       {/* Section Header */}
       <div className="flex flex-col items-center text-center gap-4 mb-16 md:mb-24">
         <p className="text-sm font-poppins font-semibold text-zinc-500 uppercase tracking-widest">
@@ -67,16 +135,17 @@ const Pricing = () => {
           Plans that scale <br className="hidden md:block" /> with your ideas.
         </h2>
         <p className="text-sm md:text-base text-zinc-600 max-w-md leading-relaxed">
-          Whether you are sketching out a dorm room project or architecting an enterprise app, we have a plan for you.
+          Whether you are sketching out a dorm room project or architecting an
+          enterprise app, we have a plan for you.
         </p>
       </div>
 
       {/* Pricing Cards Grid */}
       <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-8 items-center px-4">
         {plans.map((plan, index) => (
-          <div 
+          <div
             key={index}
-            className={`relative flex flex-col p-8 md:p-10 rounded-[32px] border-2 border-zinc-800 shadow-[8px_8px_0px_#27272a] transition-all duration-300 ${plan.color} ${plan.isPopular ? 'md:-mt-8 md:mb-8 z-20 shadow-[12px_12px_0px_#27272a]' : 'z-10 hover:-translate-y-2 hover:shadow-[12px_12px_0px_#27272a]'}`}
+            className={`relative flex flex-col p-8 md:p-10 rounded-[32px] border-2 border-zinc-800 shadow-[8px_8px_0px_#27272a] transition-all duration-300 ${plan.color} ${plan.isPopular ? "md:-mt-8 md:mb-8 z-20 shadow-[12px_12px_0px_#27272a]" : "z-10 hover:-translate-y-2 hover:shadow-[12px_12px_0px_#18181b]"}`}
           >
             {/* Popular Badge */}
             {plan.isPopular && (
@@ -102,13 +171,16 @@ const Pricing = () => {
                 {plan.billing}
               </span>
             </div>
-            
+
             <p className="text-sm text-zinc-600 leading-relaxed mb-8 h-10">
               {plan.description}
             </p>
 
-            {/* CTA Button */}
-            <button className={`w-full py-3 rounded-xl font-semibold text-sm transition-colors duration-200 mb-8 ${plan.buttonStyle}`}>
+            {/* CTA Button WITH onClick HANDLER */}
+            <button
+              onClick={() => handlePayment(plan)}
+              className={`w-full py-3 rounded-xl font-semibold text-sm transition-all duration-200 mb-8 shadow-[4px_4px_0px_transparent] hover:shadow-[4px_4px_0px_#27272a] hover:-translate-y-0.5 ${plan.buttonStyle}`}
+            >
               Get Started
             </button>
 
@@ -121,8 +193,18 @@ const Pricing = () => {
                 <div key={i} className="flex items-start gap-3">
                   {/* Custom Checkmark */}
                   <div className="mt-0.5 w-5 h-5 rounded-full bg-green-200 border border-green-600 flex items-center justify-center shrink-0">
-                    <svg className="w-3 h-3 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                    <svg
+                      className="w-3 h-3 text-green-700"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="3"
+                        d="M5 13l4 4L19 7"
+                      />
                     </svg>
                   </div>
                   <span className="text-sm text-zinc-700 font-medium">
@@ -131,11 +213,9 @@ const Pricing = () => {
                 </div>
               ))}
             </div>
-
           </div>
         ))}
       </div>
-
     </div>
   );
 };
