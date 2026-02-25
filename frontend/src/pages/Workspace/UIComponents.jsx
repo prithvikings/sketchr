@@ -17,6 +17,8 @@ import Laptopicon from "../../assets/laptop.png";
 import mic from "../../assets/mic.png";
 import camera from "../../assets/camera.png";
 import mute from "../../assets/mute.png";
+import picture from "../../assets/picture.png";
+import page from "../../assets/page.png";
 
 export const PropertiesPanel = ({
   activeColor,
@@ -509,7 +511,7 @@ export const ShareModal = ({
               className="w-full px-4 py-3 bg-white text-zinc-900 border-2 border-zinc-900 rounded-xl font-bold flex items-center justify-center gap-2 hover:shadow-[4px_4px_0px_#fcd34d] hover:-translate-y-0.5 transition-all max-md:py-2 max-md:text-sm"
             >
               <img
-                src={circleIcon}
+                src={picture}
                 alt="PNG"
                 className="w-5 h-5 object-contain max-md:w-4 max-md:h-4"
               />
@@ -520,7 +522,7 @@ export const ShareModal = ({
               className="w-full px-4 py-3 bg-white text-zinc-900 border-2 border-zinc-900 rounded-xl font-bold flex items-center justify-center gap-2 hover:shadow-[4px_4px_0px_#fcd34d] hover:-translate-y-0.5 transition-all max-md:py-2 max-md:text-sm"
             >
               <img
-                src={circleIcon}
+                src={picture}
                 alt="JPEG"
                 className="w-5 h-5 object-contain max-md:w-4 max-md:h-4"
               />
@@ -532,7 +534,7 @@ export const ShareModal = ({
               className="w-full px-4 py-3 bg-zinc-900 text-white border-2 border-zinc-900 rounded-xl font-bold flex items-center justify-center gap-2 hover:shadow-[4px_4px_0px_#27272a] hover:-translate-y-0.5 transition-all max-md:py-2 max-md:text-sm"
             >
               <img
-                src={circleIcon}
+                src={page}
                 alt="File"
                 className="w-5 h-5 object-contain max-md:w-4 max-md:h-4 filter invert"
               />

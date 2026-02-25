@@ -655,6 +655,79 @@ const Room = () => {
     return () => container.removeEventListener("wheel", handleNativeWheel);
   }, [panX, panY]);
 
+  // --- IMAGE DRAG AND DROP HANDLERS ---
+  const handleDragOver = (e) => {
+    e.preventDefault(); // Required to allow drop
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const files = e.dataTransfer.files;
+
+    if (files && files.length > 0) {
+      const file = files[0];
+
+      // Ensure it's an image
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const dataUrl = event.target.result;
+
+          // Create an image object to get natural dimensions
+          const img = new Image();
+          img.onload = () => {
+            let w = img.width;
+            let h = img.height;
+
+            // Constrain max width for dropped images
+            const maxW = 400;
+            if (w > maxW) {
+              h = (maxW / w) * h;
+              w = maxW;
+            }
+
+            // Calculate exact drop coordinates on the canvas
+            const canvasBounds = innerCanvasRef.current.getBoundingClientRect();
+            const dropX = (e.clientX - canvasBounds.left) / zoom;
+            const dropY = (e.clientY - canvasBounds.top) / zoom;
+
+            const newImage = {
+              id: Date.now().toString() + "-img",
+              type: "node",
+              shapeType: "image",
+              category: "shapes", // We store it under shapes for easy selection/resizing
+              src: dataUrl,
+              color: "transparent",
+              strokeWidth: 0,
+              x: dropX - w / 2, // Center image on the cursor drop point
+              y: dropY - h / 2,
+              width: w,
+              height: h,
+              // Setup start and current X/Y for resizing logic
+              startX: dropX - w / 2,
+              startY: dropY - h / 2,
+              currentX: dropX + w / 2,
+              currentY: dropY + h / 2,
+            };
+
+            saveState((prev) => ({
+              ...prev,
+              shapes: [...prev.shapes, newImage],
+            }));
+
+            const socket = getSocket();
+            socket?.emit("add_element", { roomId, element: newImage });
+            setSelectedIds([newImage.id]); // Auto-select upon drop
+          };
+          img.src = dataUrl;
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+  };
+
   // --- CANVAS INTERACTIONS ---
   const handlePointerDown = (e) => {
     const canvasBounds = innerCanvasRef.current.getBoundingClientRect();
@@ -1076,7 +1149,6 @@ const Room = () => {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-primarybackground font-poppins px-4">
         <div className="bg-white border-2 border-zinc-900 rounded-[32px] p-8 shadow-[12px_12px_0px_#27272a] text-center max-w-md w-full">
-          {/* Replaced text lock with image */}
           <div className="w-16 h-16 bg-amber-200 border-2 border-zinc-900 rounded-full flex items-center justify-center mx-auto mb-6 shadow-[4px_4px_0px_#27272a]">
             <img
               src={lockedIcon}
@@ -1112,7 +1184,6 @@ const Room = () => {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-primarybackground font-poppins px-4">
         <div className="bg-white border-2 border-zinc-900 rounded-[32px] p-8 shadow-[12px_12px_0px_#27272a] text-center max-w-md w-full">
-          {/* Replaced text hourglass with image */}
           <div className="w-16 h-16 bg-blue-200 border-2 border-zinc-900 rounded-full flex items-center justify-center mx-auto mb-6 shadow-[4px_4px_0px_#27272a] animate-bounce">
             <img
               src={hourglassIcon}
@@ -1136,7 +1207,6 @@ const Room = () => {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-primarybackground font-poppins px-4">
         <div className="bg-white border-2 border-zinc-900 rounded-[32px] p-8 shadow-[12px_12px_0px_#27272a] text-center max-w-md w-full">
-          {/* Replaced text cross with image */}
           <div className="w-16 h-16 bg-red-200 border-2 border-zinc-900 rounded-full flex items-center justify-center mx-auto mb-6 shadow-[4px_4px_0px_#27272a]">
             <img
               src={crossmarkIcon}
@@ -1161,13 +1231,14 @@ const Room = () => {
     );
   }
 
-  // --- AI HANDLER WITH SHIMMER LOGIC ---
+  // --- AI HANDLER WITH SEQUENTIAL ANIMATION ---
   const handleAIGenerate = async (prompt) => {
-    setIsAIModalOpen(false); // Close instantly
-    setIsGenerating(true); // Show shimmer UI
+    setIsAIModalOpen(false);
+    setIsGenerating(true);
 
     try {
       const res = await api.post("/ai/flowchart", { prompt });
+      setIsGenerating(false);
 
       const nodes = res.data.nodes || [];
       const connectors = res.data.connectors || [];
@@ -1176,9 +1247,11 @@ const Room = () => {
       let currentY = 2500 - 200;
 
       const nodeMap = {};
-      const newShapes = [];
-      const newTexts = [];
+      const nodeShapes = [];
+      const nodeTexts = [];
+      const connShapes = [];
 
+      // 1. Prepare Nodes
       nodes.forEach((node, i) => {
         const id = Date.now().toString() + "-node-" + i;
         nodeMap[node.id] = {
@@ -1189,7 +1262,7 @@ const Room = () => {
           height: 80,
         };
 
-        newShapes.push({
+        nodeShapes.push({
           id,
           type: "node",
           shapeType: "square",
@@ -1205,7 +1278,8 @@ const Room = () => {
           x: currentX,
           y: currentY,
         });
-        newTexts.push({
+
+        nodeTexts.push({
           id: id + "-text",
           type: "text",
           category: "texts",
@@ -1225,11 +1299,12 @@ const Room = () => {
         }
       });
 
+      // 2. Prepare Connectors
       connectors.forEach((conn, i) => {
         const src = nodeMap[conn.sourceId];
         const tgt = nodeMap[conn.targetId];
         if (src && tgt) {
-          newShapes.push({
+          connShapes.push({
             id: Date.now().toString() + "-conn-" + i,
             type: "node",
             shapeType: "arrow",
@@ -1248,27 +1323,46 @@ const Room = () => {
         }
       });
 
-      saveState((prev) => ({
-        ...prev,
-        shapes: [...prev.shapes, ...newShapes],
-        texts: [...prev.texts, ...newTexts],
-      }));
-
       const socket = getSocket();
-      newShapes.forEach((el) =>
-        socket?.emit("add_element", { roomId, element: el }),
-      );
-      newTexts.forEach((el) =>
-        socket?.emit("add_element", { roomId, element: el }),
-      );
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      // 3. Draw Nodes Sequentially
+      for (let i = 0; i < nodeShapes.length; i++) {
+        const shape = nodeShapes[i];
+        const text = nodeTexts[i];
+
+        saveState((prev) => ({
+          ...prev,
+          shapes: [...prev.shapes, shape],
+          texts: [...prev.texts, text],
+        }));
+
+        socket?.emit("add_element", { roomId, element: shape });
+        socket?.emit("add_element", { roomId, element: text });
+
+        await sleep(250);
+      }
+
+      // 4. Draw Connectors Sequentially
+      for (let i = 0; i < connShapes.length; i++) {
+        const conn = connShapes[i];
+
+        saveState((prev) => ({
+          ...prev,
+          shapes: [...prev.shapes, conn],
+        }));
+
+        socket?.emit("add_element", { roomId, element: conn });
+
+        await sleep(150);
+      }
     } catch (err) {
+      setIsGenerating(false);
       console.error(err);
       alert(
         err.response?.data?.error ||
           "AI Generation failed. Check API Key in Settings.",
       );
-    } finally {
-      setIsGenerating(false); // Hide shimmer UI
     }
   };
 
@@ -1334,12 +1428,11 @@ const Room = () => {
           onGenerate={handleAIGenerate}
           isGenerating={isGenerating}
         />
-
         <Header
           theme={theme}
           boardName={boardName}
           activeUsers={activeUsers}
-          onBack={() => navigate("/dashboard")}
+          onBack={() => navigate("/dashboard/boards")}
           isChatOpen={isChatOpen}
           setIsChatOpen={setIsChatOpen}
           setIsInviteOpen={setIsInviteOpen}
@@ -1464,6 +1557,8 @@ const Room = () => {
 
       <main
         id="canvas-viewport"
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
         className={`flex-1 relative w-full h-full overflow-hidden ${activeInteraction.current.tool === "selection" ? "cursor-crosshair" : activeTool === "hand" ? "cursor-grab active:cursor-grabbing" : ["pen", "square", "circle", "arrow"].includes(activeTool) ? "cursor-crosshair" : ["sticky", "text", "eraser"].includes(activeTool) ? "cursor-cell" : "cursor-default"} pointer-events-auto`}
       >
         <motion.div
@@ -1483,6 +1578,7 @@ const Room = () => {
             ref={selectionDivRef}
             className="absolute border border-blue-500 bg-blue-500/10 z-50 pointer-events-none hidden"
           />
+
           <svg
             ref={draftContainerRef}
             className="absolute inset-0 w-full h-full pointer-events-none z-0 overflow-visible hidden"
@@ -1688,36 +1784,47 @@ const Room = () => {
                     </svg>
                   )}
                   {item.category === "shapes" && (
-                    <svg className="w-full h-full overflow-visible pointer-events-none">
-                      {item.shapeType === "square" ? (
-                        <rect
-                          x="0"
-                          y="0"
-                          width={item.width}
-                          height={item.height}
-                          fill="transparent"
-                          stroke={item.color}
-                          strokeWidth={item.strokeWidth}
-                          rx="8"
-                        />
-                      ) : item.shapeType === "circle" ? (
-                        <ellipse
-                          cx={item.width / 2}
-                          cy={item.height / 2}
-                          rx={item.width / 2}
-                          ry={item.height / 2}
-                          fill="transparent"
-                          stroke={item.color}
-                          strokeWidth={item.strokeWidth}
+                    <div className="w-full h-full pointer-events-none">
+                      {item.shapeType === "image" ? (
+                        <img
+                          src={item.src}
+                          alt="Board visual"
+                          className="w-full h-full object-contain rounded-[8px] pointer-events-none select-none"
+                          draggable={false}
                         />
                       ) : (
-                        <ArrowSVG
-                          shape={item}
-                          width={item.width}
-                          height={item.height}
-                        />
+                        <svg className="w-full h-full overflow-visible pointer-events-none">
+                          {item.shapeType === "square" ? (
+                            <rect
+                              x="0"
+                              y="0"
+                              width={item.width}
+                              height={item.height}
+                              fill="transparent"
+                              stroke={item.color}
+                              strokeWidth={item.strokeWidth}
+                              rx="8"
+                            />
+                          ) : item.shapeType === "circle" ? (
+                            <ellipse
+                              cx={item.width / 2}
+                              cy={item.height / 2}
+                              rx={item.width / 2}
+                              ry={item.height / 2}
+                              fill="transparent"
+                              stroke={item.color}
+                              strokeWidth={item.strokeWidth}
+                            />
+                          ) : (
+                            <ArrowSVG
+                              shape={item}
+                              width={item.width}
+                              height={item.height}
+                            />
+                          )}
+                        </svg>
                       )}
-                    </svg>
+                    </div>
                   )}
                   {item.category === "stickies" && (
                     <div
