@@ -1,4 +1,7 @@
 import React from "react";
+import brain from "../../assets/brain.png";
+import Laptop from "../../assets/Laptop.png";
+import thunder from "../../assets/thunder.png";
 
 const Architecture = () => {
   const stack = [
@@ -6,31 +9,33 @@ const Architecture = () => {
       step: "01",
       title: "Local Canvas",
       tech: "React + HTML5 Canvas",
-      description: "Interactions are rendered instantly on the client at 60fps for zero-latency drawing and dragging.",
+      description:
+        "Interactions are rendered instantly on the client at 60fps for zero-latency drawing and dragging.",
       color: "bg-pink-100",
-      icon: "💻"
+      icon: Laptop,
     },
     {
       step: "02",
       title: "Sync Engine",
-      tech: "WebSockets + Node.js",
-      description: "Deltas (changes) are streamed to our edge servers via persistent, low-latency WebSocket connections.",
+      tech: "Socket.io + Node.js",
+      description:
+        "Deltas (changes) are streamed to our edge servers via persistent, low-latency Socket connections.",
       color: "bg-blue-100",
-      icon: "⚡"
+      icon: thunder,
     },
     {
       step: "03",
       title: "State Resolution",
       tech: "CRDTs + Yjs",
-      description: "Conflict-Free Replicated Data Types merge edits from multiple users flawlessly without locking.",
+      description:
+        "Conflict-Free Replicated Data Types merge edits from multiple users flawlessly without locking.",
       color: "bg-amber-100",
-      icon: "🧠"
-    }
+      icon: brain,
+    },
   ];
 
   return (
     <div className="py-24 md:py-32 px-4 md:px-8 w-full font-poppins relative z-10 bg-secondarybackground border-t border-dashed border-zinc-400 overflow-hidden">
-      
       {/* Section Header */}
       <div className="flex flex-col items-center text-center gap-4 mb-20">
         <p className="text-sm font-poppins font-semibold text-zinc-500 uppercase tracking-widest">
@@ -40,17 +45,17 @@ const Architecture = () => {
           Engineered for <br className="hidden md:block" /> absolute scale.
         </h2>
         <p className="text-sm md:text-base text-zinc-600 max-w-md leading-relaxed">
-          We don't just sync pixels; we sync mathematical states. Here is how we keep thousands of cursors perfectly aligned.
+          We don't just sync pixels; we sync mathematical states. Here is how we
+          keep thousands of cursors perfectly aligned.
         </p>
       </div>
 
       <div className="max-w-6xl mx-auto relative px-4">
-        
         <div className="hidden md:block absolute top-1/2 left-[10%] right-[10%] h-1 border-t-2 border-dashed border-zinc-800 -translate-y-1/2 z-0" />
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 relative z-10">
           {stack.map((item, index) => (
-            <div 
+            <div
               key={index}
               className={`flex flex-col p-8 rounded-[32px] border-2 border-zinc-800 shadow-[8px_8px_0px_#27272a] hover:-translate-y-2 hover:shadow-[12px_12px_0px_#27272a] transition-all duration-300 ${item.color}`}
             >
@@ -59,7 +64,13 @@ const Architecture = () => {
                 <span className="text-sm font-instrument font-bold text-zinc-800 border-2 border-zinc-800 rounded-full px-3 py-1 bg-white">
                   {item.step}
                 </span>
-                <span className="text-3xl filter drop-shadow-sm">{item.icon}</span>
+                <span className="flex items-center justify-center w-8 h-8 md:w-10 md:h-10 filter drop-shadow-sm">
+                  <img
+                    src={item.icon}
+                    alt={`${item.title} icon`}
+                    className="w-full h-full object-contain"
+                  />
+                </span>
               </div>
 
               {/* Node Info */}
@@ -75,7 +86,6 @@ const Architecture = () => {
             </div>
           ))}
         </div>
-
       </div>
     </div>
   );

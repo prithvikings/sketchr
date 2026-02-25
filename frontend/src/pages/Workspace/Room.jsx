@@ -34,6 +34,10 @@ import {
   AIModal,
 } from "./UIComponents";
 
+import lockedIcon from "../../assets/locked.png";
+import hourglassIcon from "../../assets/hourglassIcon.png";
+import crossmarkIcon from "../../assets/crossmark.png";
+
 // --- CURSOR COMPONENT ---
 const RemoteCursor = ({ x, y, color, name }) => (
   <div
@@ -1072,8 +1076,13 @@ const Room = () => {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-primarybackground font-poppins px-4">
         <div className="bg-white border-2 border-zinc-900 rounded-[32px] p-8 shadow-[12px_12px_0px_#27272a] text-center max-w-md w-full">
-          <div className="w-16 h-16 bg-amber-200 border-2 border-zinc-900 rounded-full flex items-center justify-center text-3xl mx-auto mb-6 shadow-[4px_4px_0px_#27272a]">
-            🔒
+          {/* Replaced text lock with image */}
+          <div className="w-16 h-16 bg-amber-200 border-2 border-zinc-900 rounded-full flex items-center justify-center mx-auto mb-6 shadow-[4px_4px_0px_#27272a]">
+            <img
+              src={lockedIcon}
+              alt="Locked"
+              className="w-8 h-8 object-contain"
+            />
           </div>
           <h2 className="font-instrument text-3xl font-bold mb-4 text-zinc-900">
             Private Board
@@ -1103,8 +1112,13 @@ const Room = () => {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-primarybackground font-poppins px-4">
         <div className="bg-white border-2 border-zinc-900 rounded-[32px] p-8 shadow-[12px_12px_0px_#27272a] text-center max-w-md w-full">
-          <div className="w-16 h-16 bg-blue-200 border-2 border-zinc-900 rounded-full flex items-center justify-center text-3xl mx-auto mb-6 shadow-[4px_4px_0px_#27272a] animate-bounce">
-            ⏳
+          {/* Replaced text hourglass with image */}
+          <div className="w-16 h-16 bg-blue-200 border-2 border-zinc-900 rounded-full flex items-center justify-center mx-auto mb-6 shadow-[4px_4px_0px_#27272a] animate-bounce">
+            <img
+              src={hourglassIcon}
+              alt="Waiting"
+              className="w-8 h-8 object-contain"
+            />
           </div>
           <h2 className="font-instrument text-3xl font-bold mb-4 text-zinc-900">
             Waiting for Host
@@ -1122,8 +1136,13 @@ const Room = () => {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-primarybackground font-poppins px-4">
         <div className="bg-white border-2 border-zinc-900 rounded-[32px] p-8 shadow-[12px_12px_0px_#27272a] text-center max-w-md w-full">
-          <div className="w-16 h-16 bg-red-200 border-2 border-zinc-900 rounded-full flex items-center justify-center text-3xl mx-auto mb-6 shadow-[4px_4px_0px_#27272a]">
-            ❌
+          {/* Replaced text cross with image */}
+          <div className="w-16 h-16 bg-red-200 border-2 border-zinc-900 rounded-full flex items-center justify-center mx-auto mb-6 shadow-[4px_4px_0px_#27272a]">
+            <img
+              src={crossmarkIcon}
+              alt="Denied"
+              className="w-8 h-8 object-contain"
+            />
           </div>
           <h2 className="font-instrument text-3xl font-bold mb-4 text-zinc-900">
             Access Denied

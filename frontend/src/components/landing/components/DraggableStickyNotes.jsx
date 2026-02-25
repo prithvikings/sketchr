@@ -1,20 +1,22 @@
 import React from "react";
 import { motion } from "motion/react";
 
+// Import your local images
+import colourpallet from "../../../assets/colourpallet.png";
+import rocket from "../../../assets/rocket.png";
+
 const DraggableStickyNotes = ({ containerRef }) => {
   const stickyNoteBaseStyles =
     "absolute bg-gradient-to-br from-yellow-200 to-amber-300 w-56 h-56 p-5 shadow-lg flex flex-col gap-2 cursor-grab active:cursor-grabbing text-zinc-800 font-handwriting text-2xl leading-tight rounded-bl-xl";
 
   return (
     <>
-      {/* Import the handwriting font directly via a style tag for easy drop-in */}
       <style>
         {`
           @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400..700&display=swap');
           .font-handwriting {
             font-family: 'Caveat', cursive;
           }
-          /* Custom checkbox style for the handwriting feel */
           .drawn-checkbox {
             appearance: none;
             width: 20px;
@@ -51,7 +53,16 @@ const DraggableStickyNotes = ({ containerRef }) => {
         <h3 className="font-bold text-3xl mb-1 border-b-2 border-zinc-800/20 inline-block w-max">
           To-Do:
         </h3>
-        <p className="mt-2">Don't forget to share the link with the design team! 🎨</p>
+        {/* FIX: Removed flex classes so the image flows inline with the text */}
+        <p className="mt-2">
+          Don't forget to share the link with the design team!
+          {/* Added a space {' '} so the emoji isn't stuck to the last word */}{" "}
+          <img
+            src={colourpallet}
+            alt="palette"
+            className="w-6 h-6 object-contain inline-block -mt-1"
+          />
+        </p>
         <p className="mt-auto text-right text-lg text-zinc-600">- Alex</p>
       </motion.div>
 
@@ -91,7 +102,16 @@ const DraggableStickyNotes = ({ containerRef }) => {
         <h3 className="font-bold text-3xl text-red-600 transform -rotate-6 mt-4 border-2 border-red-600 rounded-full text-center py-1 px-2 w-max mx-auto shadow-sm">
           APPROVED!
         </h3>
-        <p className="text-center mt-4">Wireframes look great. Moving to beta. 🚀</p>
+        {/* FIX: Removed flex classes and added text-center to keep it centered and inline */}
+        <p className="mt-4 text-center">
+          Wireframes look great. Moving to beta.
+          {/* Added a space {' '} for natural spacing */}{" "}
+          <img
+            src={rocket}
+            alt="rocket"
+            className="w-6 h-6 object-contain inline-block -mt-1"
+          />
+        </p>
       </motion.div>
     </>
   );

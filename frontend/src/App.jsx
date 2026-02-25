@@ -14,6 +14,7 @@ import Content from "./pages/Dashboard/components/Content";
 import MyBoards from "./pages/Dashboard/components/MyBoards";
 import Room from "./pages/Workspace/Room";
 import Templates from "./pages/Dashboard/components/Templates";
+import Upgrade from "./pages/Dashboard/components/Upgrade";
 import { useAuthStore } from "./store/authStore";
 
 // -----------------------------
@@ -65,6 +66,7 @@ const App = () => {
             <Route path="settings" element={<Settings />} />
             <Route path="boards" element={<MyBoards />} />
             <Route path="templates" element={<Templates />} />
+            <Route path="upgrade" element={<Upgrade />} />
           </Route>
 
           {/* A room must have an ID to function as a multiplayer environment */}

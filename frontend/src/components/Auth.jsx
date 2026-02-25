@@ -2,6 +2,10 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 
+// 1. Import the local images
+import sparkles from "../assets/sparkles.png"; // Adjust the path (e.g., ../../assets/) if your folder structure requires it
+import rocket from "../assets/rocket.png";
+
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({
@@ -195,8 +199,13 @@ const Auth = () => {
           />
 
           <div className="relative z-10">
-            <div className="w-10 h-10 bg-white border-2 border-zinc-900 rounded-xl shadow-[4px_4px_0px_#27272a] flex items-center justify-center text-xl mb-4">
-              ✨
+            {/* 2. Replaced text sparkles with the Apple image */}
+            <div className="w-10 h-10 bg-white border-2 border-zinc-900 rounded-xl shadow-[4px_4px_0px_#27272a] flex items-center justify-center mb-4">
+              <img
+                src={sparkles}
+                alt="sparkles"
+                className="w-5 h-5 object-contain"
+              />
             </div>
             <h3 className="text-2xl font-instrument font-medium text-zinc-900 leading-tight mb-3">
               "Sketchr completely changed how our remote design team operates.
@@ -208,9 +217,23 @@ const Auth = () => {
           </div>
 
           <div className="relative z-10 self-end mt-8 bg-pink-200 border-2 border-zinc-900 p-3 w-40 shadow-[6px_6px_0px_#27272a] rotate-3 hover:rotate-0 hover:-translate-y-1 transition-all duration-300">
+            <style>
+              {`
+                @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400..700&display=swap');
+                .font-handwriting {
+                  font-family: 'Caveat', cursive;
+                }
+              `}
+            </style>
             <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-8 h-3 bg-white/40 shadow-sm rotate-[-2deg]" />
+            {/* 3. Replaced text rocket and formatted it to sit inline nicely with the handwriting font */}
             <p className="font-handwriting text-lg text-zinc-900 leading-tight">
-              Don't forget to invite the dev team to the new board! 🚀
+              Don't forget to invite the dev team to the new board!{" "}
+              <img
+                src={rocket}
+                alt="rocket"
+                className="w-5 h-5 object-contain inline-block -mt-1"
+              />
             </p>
           </div>
         </div>

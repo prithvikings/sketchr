@@ -14,11 +14,8 @@ import HowItWorks from "../components/landing/HowItWorks";
 
 const Landing = () => {
   const containerRef = useRef(null);
-
-  // Modal state
   const [isDemoOpen, setIsDemoOpen] = useState(false);
 
-  // FIX 1: Lock background scrolling when modal is open
   useEffect(() => {
     if (isDemoOpen) {
       document.body.style.overflow = "hidden";
@@ -26,7 +23,6 @@ const Landing = () => {
       document.body.style.overflow = "unset";
     }
 
-    // Cleanup function in case component unmounts while modal is open
     return () => {
       document.body.style.overflow = "unset";
     };
@@ -35,17 +31,19 @@ const Landing = () => {
   return (
     <div className="w-full bg-primarybackground overflow-hidden relative">
       <div ref={containerRef} className="relative min-h-screen w-full">
-        <div className="max-w-6xl bg-secondarybackground min-h-screen mx-auto border-x border-dashed border-zinc-400 pointer-events-none relative z-0">
+        <div className="bg-secondarybackground min-h-screen mx-auto border-x border-dashed border-zinc-400 pointer-events-none relative z-0">
           <div className="pointer-events-auto">
             <Navbar onOpenDemo={() => setIsDemoOpen(true)} />
             <Hero onOpenDemo={() => setIsDemoOpen(true)} />
           </div>
         </div>
-        <DraggableStickyNotes containerRef={containerRef} />
+        <div className="hidden lg:block">
+          <DraggableStickyNotes containerRef={containerRef} />
+        </div>
       </div>
 
       <div className="relative w-full">
-        <div className="max-w-6xl bg-secondarybackground min-h-screen mx-auto border-x border-dashed border-zinc-400 relative z-0">
+        <div className="bg-secondarybackground min-h-screen mx-auto border-x border-dashed border-zinc-400 relative z-0">
           <Problem />
           <Solution />
           <Features />
@@ -57,7 +55,6 @@ const Landing = () => {
         </div>
       </div>
 
-      {/* VIDEO DEMO MODAL */}
       <AnimatePresence>
         {isDemoOpen && (
           <div
@@ -74,13 +71,12 @@ const Landing = () => {
             >
               <button
                 onClick={() => setIsDemoOpen(false)}
-                className="absolute -top-5 -right-5 md:-top-6 md:-right-6 w-10 h-10 md:w-12 md:h-12 bg-red-500 text-white border-2 border-zinc-900 rounded-full flex items-center justify-center font-bold text-xl hover:scale-110 hover:shadow-[4px_4px_0px_#27272a] transition-all z-10"
+                className="absolute -top-5 -right-5 md:-top-6 md:-right-6 w-10 h-10 md:w-12 md:h-12 bg-red-500 text-white border-2 border-zinc-900 rounded-full flex items-center justify-center font-bold text-xl hover:scale-110 hover:shadow-[4px_4px_0px_#27272a] transition-all z-10 cursor-pointer"
               >
                 ✕
               </button>
 
               <div className="aspect-video w-full rounded-[20px] overflow-hidden border-2 border-zinc-900 bg-zinc-100">
-                {/* FIX 2: Added &mute=1 to force autoplay in modern browsers */}
                 <iframe
                   width="100%"
                   height="100%"
