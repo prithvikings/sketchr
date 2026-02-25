@@ -22,32 +22,30 @@ export const saveApiKey = async (req, res) => {
 };
 
 // Update User Profile
+// Example update to your existing user.controller.js
 export const updateProfile = async (req, res) => {
   try {
-    const { fullName } = req.body;
+    const { fullName, avatar } = req.body; // Extract avatar
 
-    // req.user is populated by the requireAuth middleware
-    const user = await User.findByIdAndUpdate(
-      req.user.id,
-      { $set: { fullName } },
-      { new: true, runValidators: true },
-    ).select("-passwordHash");
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ error: "User not found" });
 
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
+    if (fullName) user.fullName = fullName;
+    if (avatar) user.avatar = avatar; // Save avatar
+
+    await user.save();
 
     res.status(200).json({
-      message: "Profile updated successfully",
+      message: "Profile updated",
       user: {
         id: user._id,
         fullName: user.fullName,
         email: user.email,
-        role: user.role,
+        avatar: user.avatar,
       },
     });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    res.status(500).json({ error: error.message });
   }
 };
 

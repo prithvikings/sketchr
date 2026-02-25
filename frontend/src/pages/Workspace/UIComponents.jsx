@@ -130,73 +130,170 @@ export const ZoomControls = ({ zoom, setZoom }) => (
   </div>
 );
 
+// --- UPDATED HEADER ---
 export const Header = ({
   theme,
+  boardName, // New Prop
+  activeUsers, // New Prop
+  onBack, // New Prop
   isChatOpen,
   setIsChatOpen,
   setIsInviteOpen,
   setIsShareOpen,
   setIsSettingsOpen,
-}) => (
-  <header
-    className={`room-header h-20 w-full border-b-2 border-zinc-800 px-6 flex items-center justify-between shadow-[0px_4px_0px_#27272a] shrink-0 pointer-events-auto z-50 ${theme === "dark" ? "bg-zinc-800" : "bg-[#f4f4f5]"}`}
-  >
-    <div className="flex items-center gap-4">
-      <button className="p-2 border-2 border-zinc-800 bg-white rounded-full hover:shadow-[2px_2px_0px_#27272a] hover:-translate-y-0.5 transition-all text-zinc-900">
-        ⬅️
-      </button>
-      <div>
-        <h1
-          className={`font-instrument text-2xl font-bold leading-none ${theme === "dark" ? "text-white" : "text-zinc-900"}`}
+}) => {
+  // Determine how many extra users to show as a "+X" bubble
+  const displayLimit = 3;
+  const visibleUsers = activeUsers.slice(0, displayLimit);
+  const extraUsersCount = activeUsers.length - displayLimit;
+
+  return (
+    <header
+      className={`room-header h-20 w-full border-b-2 border-zinc-800 px-6 flex items-center justify-between shadow-[0px_4px_0px_#27272a] shrink-0 pointer-events-auto z-50 ${theme === "dark" ? "bg-zinc-800" : "bg-[#f4f4f5]"}`}
+    >
+      <div className="flex items-center gap-4">
+        <button
+          onClick={onBack}
+          className="p-2 border-2 border-zinc-800 bg-white rounded-full hover:shadow-[2px_2px_0px_#27272a] hover:-translate-y-0.5 transition-all text-zinc-900"
+          title="Back to Dashboard"
         >
-          Design Sync - Q4
-        </h1>
-        <span className="text-xs font-bold text-green-600 tracking-wide uppercase">
-          Live Session
-        </span>
-      </div>
-    </div>
-    <div className="flex items-center gap-4">
-      <div
-        onClick={() => setIsChatOpen(!isChatOpen)}
-        className="flex items-center -space-x-3 mr-2 cursor-pointer group"
-        title="Open Chat"
-      >
-        <div className="w-10 h-10 rounded-full border-2 border-zinc-900 bg-amber-200 flex items-center justify-center font-bold text-sm text-zinc-900 shadow-[2px_2px_0px_#27272a] relative z-30 group-hover:-translate-y-1 transition-transform">
-          U1
-        </div>
-        <div className="w-10 h-10 rounded-full border-2 border-zinc-900 bg-blue-200 flex items-center justify-center font-bold text-sm text-zinc-900 shadow-[2px_2px_0px_#27272a] relative z-20 group-hover:-translate-y-1 transition-transform">
-          U2
-        </div>
-        <div className="w-10 h-10 rounded-full border-2 border-zinc-900 bg-pink-200 flex items-center justify-center font-bold text-sm text-zinc-900 shadow-[2px_2px_0px_#27272a] relative z-10 group-hover:-translate-y-1 transition-transform">
-          U3
-        </div>
-        <div className="w-10 h-10 rounded-full border-2 border-zinc-900 bg-white flex items-center justify-center font-bold text-sm text-zinc-900 shadow-[2px_2px_0px_#27272a] relative z-0 group-hover:-translate-y-1 transition-transform">
-          +3
+          ⬅️
+        </button>
+        <div>
+          <h1
+            className={`font-instrument text-2xl font-bold leading-none ${theme === "dark" ? "text-white" : "text-zinc-900"}`}
+          >
+            {boardName}
+          </h1>
+          <span className="text-xs font-bold text-green-600 tracking-wide uppercase flex items-center gap-1 mt-1">
+            <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+            Live Session
+          </span>
         </div>
       </div>
-      <button
-        onClick={() => setIsInviteOpen(true)}
-        className="px-4 py-2 bg-white text-zinc-900 border-2 border-zinc-900 rounded-[32px] font-bold hover:shadow-[4px_4px_0px_#27272a] hover:-translate-y-1 transition-all duration-200 flex items-center gap-2"
-      >
-        <span className="text-lg leading-none">+</span> Invite
-      </button>
-      <button
-        onClick={() => setIsShareOpen(true)}
-        className="px-6 py-2 bg-zinc-900 text-white border-2 border-zinc-900 rounded-[32px] font-bold hover:shadow-[4px_4px_0px_#fcd34d] hover:-translate-y-1 transition-all duration-200"
-      >
-        Share
-      </button>
-      <button
-        onClick={() => setIsSettingsOpen(true)}
-        className="p-2 border-2 border-zinc-800 bg-white rounded-full hover:shadow-[2px_2px_0px_#27272a] hover:-translate-y-0.5 transition-all text-zinc-900"
-        title="Settings"
-      >
-        ⚙️
-      </button>
-    </div>
-  </header>
-);
+
+      <div className="flex items-center gap-4">
+        {/* Dynamic Avatar Stack */}
+        <div
+          onClick={() => setIsChatOpen(!isChatOpen)}
+          className="flex items-center -space-x-3 mr-2 cursor-pointer group"
+          title="Open Chat"
+        >
+          {visibleUsers.map((u, index) => (
+            <div
+              key={u.id}
+              className={`w-10 h-10 rounded-full border-2 border-zinc-900 flex items-center justify-center font-bold text-sm text-white shadow-[2px_2px_0px_#27272a] relative transition-transform hover:-translate-y-1`}
+              style={{
+                zIndex: 30 - index,
+                backgroundColor: u.id === "local" ? "#3f3f46" : u.color, // Default gray for 'local', assigned color for peers
+              }}
+              title={u.name}
+            >
+              {u.name.charAt(0).toUpperCase()}
+            </div>
+          ))}
+
+          {extraUsersCount > 0 && (
+            <div className="w-10 h-10 rounded-full border-2 border-zinc-900 bg-white flex items-center justify-center font-bold text-sm text-zinc-900 shadow-[2px_2px_0px_#27272a] relative z-0 group-hover:-translate-y-1 transition-transform">
+              +{extraUsersCount}
+            </div>
+          )}
+        </div>
+
+        <button
+          onClick={() => setIsInviteOpen(true)}
+          className="px-4 py-2 bg-white text-zinc-900 border-2 border-zinc-900 rounded-[32px] font-bold hover:shadow-[4px_4px_0px_#27272a] hover:-translate-y-1 transition-all duration-200 flex items-center gap-2"
+        >
+          <span className="text-lg leading-none">+</span> Invite
+        </button>
+        <button
+          onClick={() => setIsShareOpen(true)}
+          className="px-6 py-2 bg-zinc-900 text-white border-2 border-zinc-900 rounded-[32px] font-bold hover:shadow-[4px_4px_0px_#fcd34d] hover:-translate-y-1 transition-all duration-200"
+        >
+          Share
+        </button>
+        <button
+          onClick={() => setIsSettingsOpen(true)}
+          className="p-2 border-2 border-zinc-800 bg-white rounded-full hover:shadow-[2px_2px_0px_#27272a] hover:-translate-y-0.5 transition-all text-zinc-900"
+          title="Settings"
+        >
+          ⚙️
+        </button>
+      </div>
+    </header>
+  );
+};
+
+// --- UPDATED INVITE MODAL ---
+export const InviteModal = ({ isOpen, onClose, roomId }) => {
+  const inviteLink = `${window.location.origin}/room/${roomId}`;
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(roomId); // Copy just the ID
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy", err);
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-900/50 pointer-events-auto"
+          onPointerDown={onClose}
+        >
+          <motion.div
+            initial={{ y: 50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 50, opacity: 0 }}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="bg-white border-2 border-zinc-900 rounded-[32px] p-8 shadow-[8px_8px_0px_#27272a] max-w-md w-full relative text-zinc-900"
+          >
+            <button
+              onClick={onClose}
+              className="absolute top-6 right-6 font-bold hover:text-red-500 text-xl leading-none"
+            >
+              ✕
+            </button>
+            <h2 className="font-instrument text-3xl font-bold mb-4">
+              Invite Collaborators
+            </h2>
+            <p className="text-zinc-600 mb-6 font-poppins">
+              Share this Room ID with your team to collaborate in real-time.
+              They can join via the Dashboard.
+            </p>
+            <div className="flex gap-2">
+              <input
+                readOnly
+                value={roomId || "Loading..."}
+                className="flex-1 border-2 border-zinc-900 rounded-xl px-4 py-2 outline-none bg-zinc-50 font-mono text-sm font-bold text-center tracking-widest"
+              />
+              <button
+                onClick={handleCopy}
+                className={`px-4 py-2 border-2 border-zinc-900 rounded-xl font-bold shadow-[2px_2px_0px_#27272a] hover:shadow-[4px_4px_0px_#27272a] hover:-translate-y-0.5 transition-all ${copied ? "bg-green-400 text-zinc-900" : "bg-amber-200"}`}
+              >
+                {copied ? "Copied!" : "Copy ID"}
+              </button>
+            </div>
+
+            <div className="mt-4 pt-4 border-t-2 border-dashed border-zinc-300">
+              <p className="text-xs text-zinc-500 font-poppins text-center">
+                Or share the direct link: <br />
+                <span className="font-mono text-zinc-800 break-all select-all mt-1 block">
+                  {inviteLink}
+                </span>
+              </p>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+};
 
 export const ChatPanel = ({
   isOpen,
@@ -281,49 +378,13 @@ export const ChatPanel = ({
   </AnimatePresence>
 );
 
-export const InviteModal = ({ isOpen, onClose }) => (
-  <AnimatePresence>
-    {isOpen && (
-      <div
-        className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-900/50 pointer-events-auto"
-        onPointerDown={onClose}
-      >
-        <motion.div
-          initial={{ y: 50, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 50, opacity: 0 }}
-          onPointerDown={(e) => e.stopPropagation()}
-          className="bg-white border-2 border-zinc-900 rounded-[32px] p-8 shadow-[8px_8px_0px_#27272a] max-w-md w-full relative text-zinc-900"
-        >
-          <button
-            onClick={onClose}
-            className="absolute top-6 right-6 font-bold hover:text-red-500 text-xl leading-none"
-          >
-            ✕
-          </button>
-          <h2 className="font-instrument text-3xl font-bold mb-4">
-            Invite Collaborators
-          </h2>
-          <p className="text-zinc-600 mb-6 font-poppins">
-            Share this link with your team to collaborate in real-time.
-          </p>
-          <div className="flex gap-2">
-            <input
-              readOnly
-              value="https://sketchr.app/room/sync-q4"
-              className="flex-1 border-2 border-zinc-900 rounded-xl px-4 py-2 outline-none bg-zinc-50 font-mono text-sm"
-            />
-            <button className="px-4 py-2 bg-amber-200 border-2 border-zinc-900 rounded-xl font-bold shadow-[2px_2px_0px_#27272a] hover:shadow-[4px_4px_0px_#27272a] hover:-translate-y-0.5 transition-all">
-              Copy
-            </button>
-          </div>
-        </motion.div>
-      </div>
-    )}
-  </AnimatePresence>
-);
-
-export const ShareModal = ({ isOpen, onClose, onExport }) => (
+// --- UPDATED SHARE MODAL ---
+export const ShareModal = ({
+  isOpen,
+  onClose,
+  onExportJSON,
+  onExportImage,
+}) => (
   <AnimatePresence>
     {isOpen && (
       <div
@@ -346,15 +407,31 @@ export const ShareModal = ({ isOpen, onClose, onExport }) => (
           <h2 className="font-instrument text-3xl font-bold mb-4">
             Export Board
           </h2>
-          <p className="text-zinc-600 mb-6 font-poppins">
-            Download a local copy of your entire whiteboard to load later.
+          <p className="text-zinc-600 mb-6 font-poppins text-sm">
+            Download a snapshot of your current view, or save the raw data file.
           </p>
-          <button
-            onClick={onExport}
-            className="w-full px-4 py-3 bg-zinc-900 text-white border-2 border-zinc-900 rounded-xl font-bold flex items-center justify-center gap-2 hover:shadow-[4px_4px_0px_#fcd34d] hover:-translate-y-0.5 transition-all"
-          >
-            Download .sketchr file ⬇️
-          </button>
+
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => onExportImage("png")}
+              className="w-full px-4 py-3 bg-white text-zinc-900 border-2 border-zinc-900 rounded-xl font-bold flex items-center justify-center gap-2 hover:shadow-[4px_4px_0px_#fcd34d] hover:-translate-y-0.5 transition-all"
+            >
+              🖼️ Export as PNG
+            </button>
+            <button
+              onClick={() => onExportImage("jpeg")}
+              className="w-full px-4 py-3 bg-white text-zinc-900 border-2 border-zinc-900 rounded-xl font-bold flex items-center justify-center gap-2 hover:shadow-[4px_4px_0px_#fcd34d] hover:-translate-y-0.5 transition-all"
+            >
+              📸 Export as JPEG
+            </button>
+            <div className="w-full h-[2px] bg-zinc-200 my-2"></div>
+            <button
+              onClick={onExportJSON}
+              className="w-full px-4 py-3 bg-zinc-900 text-white border-2 border-zinc-900 rounded-xl font-bold flex items-center justify-center gap-2 hover:shadow-[4px_4px_0px_#27272a] hover:-translate-y-0.5 transition-all"
+            >
+              💾 Download .sketchr File
+            </button>
+          </div>
         </motion.div>
       </div>
     )}

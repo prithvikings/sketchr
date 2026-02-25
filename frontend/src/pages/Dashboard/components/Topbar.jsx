@@ -9,17 +9,22 @@ const Topbar = () => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
+  // ADDED: State to track the input value properly
+  const [newBoardName, setNewBoardName] = useState("");
+
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
 
   const handleCreateRoom = async () => {
     setIsCreating(true);
     try {
-      const name = document.getElementById("boardNameInput").value.trim();
+      // CHANGED: Use the React state instead of document.getElementById
+      const name = newBoardName.trim() || "Untitled Board";
       const response = await api.post("/rooms", { name, maxParticipants: 10 });
       const roomId = response.data._id;
 
       setIsNewBoardOpen(false);
+      setNewBoardName(""); // Reset input for next time
       navigate(`/room/${roomId}`);
     } catch (error) {
       console.error("Failed to create room:", error);
@@ -30,7 +35,6 @@ const Topbar = () => {
   };
 
   const handleJoinRoom = (e) => {
-    // Prevent page reload on form submit
     e.preventDefault();
     const roomId = e.target.roomCode.value.trim();
     if (roomId) {
@@ -45,7 +49,7 @@ const Topbar = () => {
     } catch (err) {
       console.error("Backend logout failed, proceeding with local logout");
     } finally {
-      logout(); // Clears Zustand store and localStorage
+      logout();
       navigate("/auth");
     }
   };
@@ -129,7 +133,6 @@ const Topbar = () => {
       {/* Join via Code Modal */}
       {isJoinOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/40 backdrop-blur-sm">
-          {/* Changed to form to handle the Enter key submission */}
           <form
             onSubmit={handleJoinRoom}
             className="bg-amber-100 border-2 border-zinc-800 rounded-[32px] p-8 w-full max-w-sm shadow-[12px_12px_0px_#27272a] relative"
@@ -184,12 +187,13 @@ const Topbar = () => {
                 </label>
                 <input
                   type="text"
+                  value={newBoardName} // CHANGED: Tied to state
+                  onChange={(e) => setNewBoardName(e.target.value)} // CHANGED: Tied to state
                   placeholder="e.g. Project Q1"
                   className="w-full bg-zinc-50 border-2 border-zinc-800 rounded-[16px] px-4 py-3 outline-none focus:shadow-[4px_4px_0px_#27272a] transition-shadow text-zinc-900 font-poppins"
                 />
               </div>
             </div>
-            {/* Added onClick, disabled state, and dynamic text */}
             <button
               onClick={handleCreateRoom}
               disabled={isCreating}

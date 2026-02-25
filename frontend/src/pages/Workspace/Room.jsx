@@ -5,15 +5,17 @@ import React, {
   useCallback,
   useEffect,
 } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { gsap } from "gsap";
 import { motion, AnimatePresence, useMotionValue } from "framer-motion";
 import { getStroke } from "perfect-freehand";
+import { toPng, toJpeg } from "html-to-image";
 
 import { useAuthStore } from "../../store/authStore";
 import { useBoardStore } from "../../store/boardStore";
 import { initSocket, getSocket } from "../../services/socket";
 import { useWebRTC } from "../../hooks/network/useWebRTC";
+import api from "../../services/api";
 import {
   getSvgPathFromStroke,
   getShapeAttributes,
@@ -34,7 +36,7 @@ import {
 // --- CURSOR COMPONENT ---
 const RemoteCursor = ({ x, y, color, name }) => (
   <div
-    className="absolute pointer-events-none z-[100]"
+    className="remote-cursor-element absolute pointer-events-none z-[100]"
     style={{
       transform: `translate(${x}px, ${y}px)`,
       transition: "transform 0.05s linear",
@@ -77,7 +79,6 @@ const ArrowSVG = ({ shape, width, height }) => {
   const p1y = y2 - headLen * Math.sin(angle - Math.PI / 6);
   const p2x = x2 - headLen * Math.cos(angle + Math.PI / 6);
   const p2y = y2 - headLen * Math.sin(angle + Math.PI / 6);
-
   return (
     <g
       stroke={shape.color}
@@ -115,7 +116,6 @@ const computeDiff = (oldState, newState) => {
   const added = [],
     updated = [],
     deleted = [];
-
   newMap.forEach((newEl, id) => {
     const oldEl = oldMap.get(id);
     if (!oldEl) added.push(newEl);
@@ -124,7 +124,6 @@ const computeDiff = (oldState, newState) => {
   oldMap.forEach((_, id) => {
     if (!newMap.has(id)) deleted.push(id);
   });
-
   return { added, updated, deleted };
 };
 
@@ -142,8 +141,73 @@ const broadcastDiff = (diff, socket, roomId) => {
 };
 
 const Room = () => {
-  const { roomId } = useParams();
+  const params = useParams();
+  const roomId = params.roomId || params.id;
+  const navigate = useNavigate();
   const { user } = useAuthStore();
+
+  // --- ACCESS CONTROL & LOBBY STATE ---
+  const [accessStatus, setAccessStatus] = useState("checking"); // checking, request_needed, waiting, granted, rejected
+  const [isHost, setIsHost] = useState(false);
+  const [joinRequests, setJoinRequests] = useState([]); // List of people knocking
+  const [boardName, setBoardName] = useState("Loading...");
+
+  // Verify access permissions on load
+  useEffect(() => {
+    const fetchRoomDetails = async () => {
+      if (!roomId || roomId === "undefined" || !user?.id) return;
+      try {
+        const res = await api.get(`/rooms/${roomId}`);
+        const room = res.data;
+        setBoardName(room.name || "Untitled Board");
+
+        const isUserHost = room.hostId === user.id;
+        const isParticipant = room.participants?.includes(user.id);
+
+        if (isUserHost || isParticipant) {
+          setIsHost(isUserHost);
+          setAccessStatus("granted"); // Open the gates
+        } else {
+          setAccessStatus("request_needed"); // Show the lobby door
+        }
+      } catch (err) {
+        setAccessStatus("rejected");
+      }
+    };
+    fetchRoomDetails();
+  }, [roomId, user]);
+
+  const handleRequestAccess = () => {
+    setAccessStatus("waiting");
+    const socket = initSocket(); // Boot up socket just to knock
+    socket.emit("request_join", {
+      roomId,
+      user: { id: user.id, name: user.fullName },
+    });
+
+    // Listen for the host's decision
+    socket.on("join_request_resolved", async ({ status }) => {
+      if (status === "accepted") {
+        try {
+          // Permanently save to DB so they don't have to knock if they refresh
+          await api.post(`/rooms/${roomId}/join`);
+          setAccessStatus("granted");
+        } catch (err) {
+          console.error("Failed to confirm join", err);
+        }
+      } else {
+        setAccessStatus("rejected");
+      }
+      socket.off("join_request_resolved");
+    });
+  };
+
+  const handleResolveJoin = (guestSocketId, status) => {
+    getSocket()?.emit("resolve_join_request", { guestSocketId, status });
+    setJoinRequests((prev) =>
+      prev.filter((req) => req.guestSocketId !== guestSocketId),
+    );
+  };
 
   // --- WEBRTC INIT ---
   const {
@@ -251,9 +315,18 @@ const Room = () => {
   const getFontSize = (width) =>
     width === 4 ? 16 : width === 8 ? 24 : width === 16 ? 48 : 64;
 
-  // --- WEBSOCKET INITIALIZATION ---
+  const activeUsers = [
+    { id: "local", name: user?.fullName || "You", color: "#3f3f46" },
+    ...Object.entries(cursors).map(([socketId, cursorData]) => ({
+      id: socketId,
+      name: cursorData.name,
+      color: cursorData.color,
+    })),
+  ];
+
+  // --- MAIN WEBSOCKET INITIALIZATION (ONLY RUNS IF GRANTED) ---
   useEffect(() => {
-    if (!roomId) return;
+    if (accessStatus !== "granted" || !roomId) return;
     const socket = initSocket();
     socket.emit("join_room", { roomId });
 
@@ -269,13 +342,27 @@ const Room = () => {
           categorizedState[el.category].push(el);
       });
       replaceState(categorizedState);
+
+      socket.emit("cursor_move", {
+        roomId,
+        cursor: {
+          x: -10000,
+          y: -10000,
+          name: user?.fullName || "Anonymous",
+          color: myCursorColor.current,
+        },
+      });
     });
 
-    // WEBRTC SIGNALING LISTENER
-    socket.on("user_video_ready", ({ peerId: incomingPeerId }) => {
-      if (localStream && incomingPeerId) {
-        callPeer(incomingPeerId);
+    // Handle Incoming Lobby Requests (Host Only)
+    socket.on("incoming_join_request", ({ guestSocketId, guestUser }) => {
+      if (isHost) {
+        setJoinRequests((prev) => [...prev, { guestSocketId, guestUser }]);
       }
+    });
+
+    socket.on("user_video_ready", ({ peerId: incomingPeerId }) => {
+      if (localStream && incomingPeerId) callPeer(incomingPeerId);
     });
 
     socket.on("add_element", (element) => {
@@ -333,6 +420,7 @@ const Room = () => {
     return () => {
       socket.emit("leave_room", { roomId });
       socket.off("initial_state");
+      socket.off("incoming_join_request");
       socket.off("user_video_ready");
       socket.off("add_element");
       socket.off("update_element");
@@ -341,7 +429,57 @@ const Room = () => {
       socket.off("user_left");
       socket.off("receive_message");
     };
-  }, [roomId, replaceState, localStream, callPeer]);
+  }, [roomId, accessStatus, isHost, replaceState, localStream, callPeer, user]);
+
+  // --- EXPORT LOGIC ---
+  const handleExportJSON = () => {
+    const blob = new Blob([JSON.stringify(currentStateRef.current, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "sketchr-board.sketchr";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setIsShareOpen(false);
+  };
+
+  const handleExportImage = async (format) => {
+    const node = document.getElementById("canvas-viewport");
+    if (!node) return;
+
+    setSelectedIds([]);
+
+    setTimeout(async () => {
+      try {
+        const exportOptions = {
+          quality: 1,
+          backgroundColor: theme === "dark" ? "#18181b" : "#f4f4f5",
+          filter: (domNode) => {
+            return !domNode.classList?.contains("remote-cursor-element");
+          },
+        };
+
+        let dataUrl;
+        if (format === "png") {
+          dataUrl = await toPng(node, exportOptions);
+        } else {
+          dataUrl = await toJpeg(node, exportOptions);
+        }
+
+        const link = document.createElement("a");
+        link.download = `sketchmesh-export.${format}`;
+        link.href = dataUrl;
+        link.click();
+        setIsShareOpen(false);
+      } catch (err) {
+        console.error("Image export failed", err);
+      }
+    }, 100);
+  };
 
   // --- CHAT & HISTORY HANDLERS ---
   const handleSendChatMessage = (text) => {
@@ -763,36 +901,6 @@ const Room = () => {
     draftContainerRef.current.style.display = "none";
   };
 
-  // --- ANIMATIONS & RESIZING ---
-  useLayoutEffect(() => {
-    let ctx = gsap.context(() => {
-      gsap.fromTo(
-        ".room-header",
-        { y: -100, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.6, ease: "back.out(1.2)" },
-      );
-      gsap.fromTo(
-        ".ui-panel",
-        { y: 50, opacity: 0 },
-        {
-          y: 0,
-          opacity: 1,
-          stagger: 0.1,
-          duration: 0.5,
-          ease: "back.out(1.5)",
-          delay: 0.2,
-          clearProps: "all",
-        },
-      );
-      gsap.fromTo(
-        ".canvas-bg",
-        { opacity: 0 },
-        { opacity: 1, duration: 1, ease: "power2.out", delay: 0.4 },
-      );
-    }, roomRef);
-    return () => ctx.revert();
-  }, []);
-
   const getGroupBounds = () => {
     if (selectedIds.length === 0) return null;
     let minX = Infinity,
@@ -901,21 +1009,6 @@ const Room = () => {
     });
   };
 
-  const handleExportJSON = () => {
-    const blob = new Blob([JSON.stringify(currentStateRef.current, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "sketchr-board.sketchr";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    setIsShareOpen(false);
-  };
-
   const ResizeHandles = ({ bounds }) => (
     <>
       <motion.div
@@ -950,17 +1043,153 @@ const Room = () => {
 
   const groupBounds = getGroupBounds();
 
+  // ==========================================
+  // EARLY RETURNS FOR WAITING ROOM SCREENS
+  // ==========================================
+
+  if (accessStatus === "checking") {
+    return (
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-primarybackground font-poppins">
+        <div className="w-12 h-12 border-4 border-zinc-900 border-t-amber-200 rounded-full animate-spin mb-4"></div>
+        <span className="font-instrument text-2xl font-bold text-zinc-900 animate-pulse">
+          Loading Workspace...
+        </span>
+      </div>
+    );
+  }
+
+  if (accessStatus === "request_needed") {
+    return (
+      <div className="h-screen w-full flex items-center justify-center bg-primarybackground font-poppins px-4">
+        <div className="bg-white border-2 border-zinc-900 rounded-[32px] p-8 shadow-[12px_12px_0px_#27272a] text-center max-w-md w-full">
+          <div className="w-16 h-16 bg-amber-200 border-2 border-zinc-900 rounded-full flex items-center justify-center text-3xl mx-auto mb-6 shadow-[4px_4px_0px_#27272a]">
+            🔒
+          </div>
+          <h2 className="font-instrument text-3xl font-bold mb-4 text-zinc-900">
+            Private Board
+          </h2>
+          <p className="text-zinc-600 mb-8 font-medium">
+            You need permission from the host to join this collaborative
+            session.
+          </p>
+          <button
+            onClick={handleRequestAccess}
+            className="w-full py-4 bg-zinc-900 text-white border-2 border-zinc-900 rounded-[24px] font-bold shadow-[4px_4px_0px_#fcd34d] hover:-translate-y-1 transition-all text-lg"
+          >
+            Knock to Enter
+          </button>
+          <button
+            onClick={() => navigate("/dashboard")}
+            className="w-full py-4 mt-4 bg-transparent text-zinc-500 font-bold hover:text-zinc-900 transition-colors"
+          >
+            Return to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (accessStatus === "waiting") {
+    return (
+      <div className="h-screen w-full flex items-center justify-center bg-primarybackground font-poppins px-4">
+        <div className="bg-white border-2 border-zinc-900 rounded-[32px] p-8 shadow-[12px_12px_0px_#27272a] text-center max-w-md w-full">
+          <div className="w-16 h-16 bg-blue-200 border-2 border-zinc-900 rounded-full flex items-center justify-center text-3xl mx-auto mb-6 shadow-[4px_4px_0px_#27272a] animate-bounce">
+            ⏳
+          </div>
+          <h2 className="font-instrument text-3xl font-bold mb-4 text-zinc-900">
+            Waiting for Host
+          </h2>
+          <p className="text-zinc-600 mb-8 font-medium">
+            We've notified the host. You'll be let in as soon as they approve
+            your request.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (accessStatus === "rejected") {
+    return (
+      <div className="h-screen w-full flex items-center justify-center bg-primarybackground font-poppins px-4">
+        <div className="bg-white border-2 border-zinc-900 rounded-[32px] p-8 shadow-[12px_12px_0px_#27272a] text-center max-w-md w-full">
+          <div className="w-16 h-16 bg-red-200 border-2 border-zinc-900 rounded-full flex items-center justify-center text-3xl mx-auto mb-6 shadow-[4px_4px_0px_#27272a]">
+            ❌
+          </div>
+          <h2 className="font-instrument text-3xl font-bold mb-4 text-zinc-900">
+            Access Denied
+          </h2>
+          <p className="text-zinc-600 mb-8 font-medium">
+            The host declined your request to join this board.
+          </p>
+          <button
+            onClick={() => navigate("/dashboard")}
+            className="w-full py-4 bg-zinc-900 text-white border-2 border-zinc-900 rounded-[24px] font-bold shadow-[4px_4px_0px_#fcd34d] hover:-translate-y-1 transition-all text-lg"
+          >
+            Return to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // MAIN CANVAS RENDER (If Granted)
+  // ==========================================
   return (
     <div
       ref={roomWrapperRef}
       className={`h-screen w-full flex flex-col overflow-hidden relative font-poppins overscroll-none touch-none ${theme === "dark" ? "bg-zinc-900" : "bg-primarybackground"}`}
     >
+      {/* HOST NOTIFICATION OVERLAY FOR INCOMING REQUESTS */}
+      {isHost && joinRequests.length > 0 && (
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-3 pointer-events-auto">
+          {joinRequests.map((req) => (
+            <motion.div
+              initial={{ y: -20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              key={req.guestSocketId}
+              className="bg-white border-2 border-zinc-900 rounded-[24px] shadow-[6px_6px_0px_#27272a] p-4 flex items-center gap-6"
+            >
+              <div>
+                <p className="font-bold font-poppins text-zinc-900 text-sm leading-tight">
+                  {req.guestUser.name}
+                </p>
+                <p className="text-xs text-zinc-500 font-poppins">
+                  wants to join
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() =>
+                    handleResolveJoin(req.guestSocketId, "accepted")
+                  }
+                  className="px-4 py-2 bg-green-400 border-2 border-zinc-900 rounded-xl font-bold hover:shadow-[2px_2px_0px_#27272a] hover:-translate-y-0.5 transition-all text-xs"
+                >
+                  Admit
+                </button>
+                <button
+                  onClick={() =>
+                    handleResolveJoin(req.guestSocketId, "rejected")
+                  }
+                  className="px-4 py-2 bg-red-400 text-white border-2 border-zinc-900 rounded-xl font-bold hover:shadow-[2px_2px_0px_#27272a] hover:-translate-y-0.5 transition-all text-xs"
+                >
+                  Deny
+                </button>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
+
       <div
         ref={roomRef}
         className="absolute inset-0 flex flex-col pointer-events-none z-50"
       >
         <Header
           theme={theme}
+          boardName={boardName}
+          activeUsers={activeUsers}
+          onBack={() => navigate("/dashboard")}
           isChatOpen={isChatOpen}
           setIsChatOpen={setIsChatOpen}
           setIsInviteOpen={setIsInviteOpen}
@@ -996,19 +1225,22 @@ const Room = () => {
           peers={peers}
           toggleVideo={toggleVideo}
           toggleAudio={toggleAudio}
-          toggleScreenShare={toggleScreenShare} // Pass it down
-          isScreenSharing={isScreenSharing} // Pass it down
-          stopStream={stopStream} // Pass it down
+          toggleScreenShare={toggleScreenShare}
+          isScreenSharing={isScreenSharing}
+          stopStream={stopStream}
           userName={user?.fullName}
         />
+
         <InviteModal
           isOpen={isInviteOpen}
           onClose={() => setIsInviteOpen(false)}
+          roomId={roomId}
         />
         <ShareModal
           isOpen={isShareOpen}
           onClose={() => setIsShareOpen(false)}
-          onExport={handleExportJSON}
+          onExportJSON={handleExportJSON}
+          onExportImage={handleExportImage}
         />
         <SettingsModal
           isOpen={isSettingsOpen}
@@ -1037,6 +1269,7 @@ const Room = () => {
       </div>
 
       <main
+        id="canvas-viewport"
         className={`flex-1 relative w-full h-full overflow-hidden ${activeInteraction.current.tool === "selection" ? "cursor-crosshair" : activeTool === "hand" ? "cursor-grab active:cursor-grabbing" : ["pen", "square", "circle", "arrow"].includes(activeTool) ? "cursor-crosshair" : ["sticky", "text", "eraser"].includes(activeTool) ? "cursor-cell" : "cursor-default"} pointer-events-auto`}
       >
         <motion.div

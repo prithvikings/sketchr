@@ -4,6 +4,34 @@ import jwt from "jsonwebtoken";
 import Whiteboard from "../modules/whiteboard/whiteboard.model.js";
 
 const roomStateCache = new Map();
+const cacheCleanupTimeouts = new Map();
+const autoSaveTimeouts = new Map();
+
+// --- HELPER: DEBOUNCED DB SAVE ---
+// This ensures we save to MongoDB every 5 seconds during active drawing,
+// rather than only saving when the user leaves.
+const triggerAutoSave = (roomId) => {
+  if (autoSaveTimeouts.has(roomId)) return; // Save is already scheduled
+
+  const timeout = setTimeout(async () => {
+    const elementsMap = roomStateCache.get(roomId);
+    if (elementsMap) {
+      const elementsArray = Array.from(elementsMap.values());
+      try {
+        await Whiteboard.findOneAndUpdate(
+          { roomId },
+          { elements: elementsArray, lastUpdated: Date.now() },
+          { upsert: true },
+        );
+      } catch (err) {
+        console.error("[DB_SAVE_ERROR]", err);
+      }
+    }
+    autoSaveTimeouts.delete(roomId);
+  }, 5000);
+
+  autoSaveTimeouts.set(roomId, timeout);
+};
 
 const initSockets = (httpServer) => {
   const io = new Server(httpServer, {
@@ -34,29 +62,37 @@ const initSockets = (httpServer) => {
       socket.join(roomId);
       socket.roomId = roomId;
 
-      // 1. If room isn't in cache, try to load it from MongoDB
-      if (!roomStateCache.has(roomId)) {
-        const savedBoard = await Whiteboard.findOne({ roomId });
-        const elementMap = new Map();
+      // 1. REFRESH FIX: Cancel any pending cache destruction because the user came back
+      if (cacheCleanupTimeouts.has(roomId)) {
+        clearTimeout(cacheCleanupTimeouts.get(roomId));
+        cacheCleanupTimeouts.delete(roomId);
+      }
 
-        if (savedBoard && savedBoard.elements) {
-          savedBoard.elements.forEach((el) => elementMap.set(el.id, el));
+      // 2. If room isn't in memory cache, load it from MongoDB
+      if (!roomStateCache.has(roomId)) {
+        const elementMap = new Map();
+        try {
+          const savedBoard = await Whiteboard.findOne({ roomId });
+          if (savedBoard && savedBoard.elements) {
+            savedBoard.elements.forEach((el) => elementMap.set(el.id, el));
+          }
+        } catch (err) {
+          console.error("[DB_LOAD_ERROR]", err);
         }
         roomStateCache.set(roomId, elementMap);
       }
 
-      // 2. Send the current state to the user who just joined
+      // 3. Send the current state to the user who just joined
       const currentElements = Array.from(roomStateCache.get(roomId).values());
       socket.emit("initial_state", currentElements);
 
-      // 3. Notify others
+      // 4. Notify others
       socket
         .to(roomId)
         .emit("user_joined", { socketId: socket.id, userId: socket.user.id });
     });
 
     socket.on("cursor_move", ({ roomId, cursor }) => {
-      // Broadcast cursor position to everyone EXCEPT the sender
       socket.to(roomId).emit("cursor_move", { socketId: socket.id, cursor });
     });
 
@@ -67,21 +103,13 @@ const initSockets = (httpServer) => {
         .emit("user_left", { socketId: socket.id, userId: socket.user.id });
     });
 
-    socket.on("draw_stroke", ({ roomId, element }) => {
-      if (roomStateCache.has(roomId))
-        roomStateCache.get(roomId).set(element.id, element);
-      socket.to(roomId).emit("draw_stroke", element);
-    });
-
+    // Handle incoming draw data and trigger the auto-save
     socket.on("add_element", ({ roomId, element }) => {
-      if (roomStateCache.has(roomId))
+      if (roomStateCache.has(roomId)) {
         roomStateCache.get(roomId).set(element.id, element);
+        triggerAutoSave(roomId);
+      }
       socket.to(roomId).emit("add_element", element);
-    });
-
-    socket.on("video_ready", ({ roomId, peerId }) => {
-      // Tell everyone else this specific unique peer is ready
-      socket.to(roomId).emit("user_video_ready", { peerId });
     });
 
     socket.on("update_element", ({ roomId, elementId, updates }) => {
@@ -89,57 +117,64 @@ const initSockets = (httpServer) => {
         const elements = roomStateCache.get(roomId);
         const existing = elements.get(elementId) || {};
         elements.set(elementId, { ...existing, ...updates });
+        triggerAutoSave(roomId);
       }
       socket.to(roomId).emit("update_element", { elementId, updates });
     });
 
     socket.on("delete_element", ({ roomId, elementId }) => {
-      if (roomStateCache.has(roomId))
+      if (roomStateCache.has(roomId)) {
         roomStateCache.get(roomId).delete(elementId);
+        triggerAutoSave(roomId);
+      }
       socket.to(roomId).emit("delete_element", { elementId });
     });
 
-    socket.on("send_offer", ({ targetId, offer }) => {
-      socket.to(targetId).emit("receive_offer", { senderId: socket.id, offer });
+    socket.on("video_ready", ({ roomId, peerId }) => {
+      socket.to(roomId).emit("user_video_ready", { peerId });
     });
 
-    socket.on("send_answer", ({ targetId, answer }) => {
-      socket
-        .to(targetId)
-        .emit("receive_answer", { senderId: socket.id, answer });
-    });
-
-    socket.on("send_ice", ({ targetId, candidate }) => {
-      socket
-        .to(targetId)
-        .emit("receive_ice", { senderId: socket.id, candidate });
-    });
     socket.on("send_message", ({ roomId, message }) => {
-      // Broadcast the message to everyone in the room EXCEPT the sender
       socket.to(roomId).emit("receive_message", message);
+    });
+
+    socket.on("request_join", ({ roomId, user }) => {
+      // Forward the request to everyone in the room (The host's UI will catch this)
+      socket
+        .to(roomId)
+        .emit("incoming_join_request", {
+          guestSocketId: socket.id,
+          guestUser: user,
+        });
+    });
+
+    socket.on("resolve_join_request", ({ guestSocketId, status }) => {
+      // Send the host's decision directly back to the specific guest waiting in the lobby
+      io.to(guestSocketId).emit("join_request_resolved", { status });
     });
 
     socket.on("disconnect", async () => {
       const roomId = socket.roomId;
       if (!roomId) return;
 
-      // Tell everyone this user left so their cursor gets deleted
       socket
         .to(roomId)
         .emit("user_left", { socketId: socket.id, userId: socket.user.id });
 
       const room = io.sockets.adapter.rooms.get(roomId);
+
+      // If the room is now completely empty
       if (!room || room.size === 0) {
-        const elementsMap = roomStateCache.get(roomId);
-        if (elementsMap && elementsMap.size > 0) {
-          const elementsArray = Array.from(elementsMap.values());
-          await Whiteboard.findOneAndUpdate(
-            { roomId },
-            { elements: elementsArray, lastUpdated: Date.now() },
-            { upsert: true },
-          ).catch((err) => console.error("[DB_SAVE_ERROR]", err));
-        }
-        roomStateCache.delete(roomId);
+        triggerAutoSave(roomId); // Final save push
+
+        // Wait 30 seconds before wiping the cache from memory.
+        // This gives the user plenty of time to refresh the page without losing the active state.
+        const timeoutId = setTimeout(() => {
+          roomStateCache.delete(roomId);
+          cacheCleanupTimeouts.delete(roomId);
+        }, 30000);
+
+        cacheCleanupTimeouts.set(roomId, timeoutId);
       }
     });
   });

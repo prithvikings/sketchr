@@ -74,3 +74,35 @@ export const getIceServers = async (req, res) => {
 
   res.status(200).json({ iceServers });
 };
+
+export const getRoom = async (req, res) => {
+  try {
+    const room = await Room.findById(req.params.id);
+    if (!room) throw new Error("Room not found");
+    res.status(200).json(room);
+  } catch (error) {
+    res.status(404).json({ error: error.message });
+  }
+};
+
+export const deleteRoom = async (req, res) => {
+  try {
+    const room = await Room.findById(req.params.id);
+
+    if (!room) {
+      return res.status(404).json({ error: "Room not found" });
+    }
+
+    // Only allow the host to delete the room
+    if (room.hostId.toString() !== req.user.id) {
+      return res
+        .status(403)
+        .json({ error: "Only the host can delete this board" });
+    }
+
+    await Room.findByIdAndDelete(req.params.id);
+    res.status(200).json({ message: "Board deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
