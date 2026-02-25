@@ -5,7 +5,7 @@ import Hero from "../components/landing/Hero";
 import Problem from "../components/landing/Problem";
 import Solution from "../components/landing/Solution";
 import Features from "../components/landing/Features";
-import Usecases from "../components/landing/Usecases";
+import UseCases from "../components/landing/UseCases";
 import Architecture from "../components/landing/Architecture";
 import Pricing from "../components/landing/Pricing";
 import FinalCTA from "../components/landing/FinalCTA";
@@ -48,7 +48,7 @@ const Landing = () => {
           <Solution />
           <Features />
           <HowItWorks />
-          <Usecases />
+          <UseCases />
           <Architecture />
           <Pricing />
           <FinalCTA />
