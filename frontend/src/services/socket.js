@@ -2,7 +2,7 @@ import { io } from "socket.io-client";
 
 const SOCKET_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace("/api", "")
-  : "http://localhost:10000";
+  : "http://localhost:3000";
 
 let socket = null;
 
