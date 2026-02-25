@@ -1,6 +1,6 @@
 import React from "react";
 import brain from "../../assets/brain.png";
-import Laptop from "../../assets/Laptop.png";
+import Laptop from "../../assets/laptop.png";
 import thunder from "../../assets/thunder.png";
 
 const Architecture = () => {
